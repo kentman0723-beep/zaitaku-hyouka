@@ -229,7 +229,7 @@
                 previousDate: '',
                 periodStart: '',
                 periodEnd: '',
-                methods: { commute: true, visit: false, phone: false, line: false, discord: false, googleForm: false },
+                selectedMethod: 'commute',
                 condition: '',
                 workContent: '',
                 goals: '',
@@ -262,7 +262,7 @@
                         previousDate: r.previous_date,
                         periodStart: r.period_start,
                         periodEnd: r.period_end,
-                        methods: r.methods || {},
+                        selectedMethod: r.selected_method || r.methods ? (typeof r.selected_method === 'string' ? r.selected_method : (r.methods && typeof r.methods === 'object' ? Object.keys(r.methods).find(k => r.methods[k]) || 'commute' : 'commute')) : 'commute',
                         condition: r.condition || '',
                         workContent: r.work_content || '',
                         goals: r.goals || '',
@@ -308,7 +308,8 @@
                         previous_date: record.previousDate,
                         period_start: record.periodStart,
                         period_end: record.periodEnd,
-                        methods: record.methods,
+                        selected_method: record.selectedMethod,
+                        methods: { [record.selectedMethod]: true },
                         condition: record.condition,
                         work_content: record.workContent,
                         goals: record.goals,
@@ -509,14 +510,8 @@
 
                 const rows = targetRecords.map(rec => {
                     const user = users.find(u => u.id === rec.userId);
-                    const methods = [
-                        rec.methods.commute ? '通所' : '',
-                        rec.methods.visit ? '訪問' : '',
-                        rec.methods.phone ? '電話' : '',
-                        rec.methods.line ? 'LINE' : '',
-                        rec.methods.discord ? 'Discord' : '',
-                        rec.methods.googleForm ? 'Googleフォーム' : ''
-                    ].filter(Boolean).join('・');
+                    const methodMap = { commute: '通所', visit: '訪問', phone: '電話', line: 'LINE', discord: 'Discord', googleForm: 'Googleフォーム' };
+                    const methods = rec.selectedMethod ? (methodMap[rec.selectedMethod] || rec.selectedMethod) : (rec.methods ? Object.keys(rec.methods).filter(k => rec.methods[k]).map(k => methodMap[k] || k).join('・') : '');
 
                     return {
                         "氏名": user ? user.name : '不明',
@@ -605,8 +600,8 @@
                                                 <input type="date" value={formData.implementationDate} onChange={e => handleDateChange(e.target.value)} className="input-field" />
                                             </div>
                                             <div>
-                                                <label className="block text-sm font-bold text-gray-600 mb-1">前回実施日 (自動)</label>
-                                                <input type="date" value={formData.previousDate} readOnly className="input-field bg-gray-100 text-gray-500" />
+                                                <label className="block text-sm font-bold text-gray-600 mb-1">前回実施日 (自動/手動)</label>
+                                                <input type="date" value={formData.previousDate} onChange={e => setFormData({ ...formData, previousDate: e.target.value })} className="input-field" />
                                             </div>
                                             <div>
                                                 <label className="block text-sm font-bold text-gray-600 mb-1">対象期間 (自動)</label>
@@ -621,9 +616,9 @@
                                         <div className="glass p-5 rounded-xl space-y-4">
                                             <label className="block text-sm font-bold text-gray-600 mb-2">実施方法</label>
                                             <div className="grid grid-cols-2 gap-2">
-                                                {Object.keys(formData.methods).map(key => (
-                                                    <label key={key} className={`cursor-pointer p-2 rounded-lg border text-center text-sm transition ${formData.methods[key] ? 'bg-green-100 border-green-500 text-green-800 font-bold' : 'bg-white border-gray-200 text-gray-500'}`}>
-                                                        <input type="checkbox" className="hidden" checked={formData.methods[key]} onChange={() => setFormData({ ...formData, methods: { ...formData.methods, [key]: !formData.methods[key] } })} />
+                                                {['commute', 'visit', 'phone', 'line', 'discord', 'googleForm'].map(key => (
+                                                    <label key={key} className={`cursor-pointer p-2 rounded-lg border text-center text-sm transition ${formData.selectedMethod === key ? 'bg-green-100 border-green-500 text-green-800 font-bold' : 'bg-white border-gray-200 text-gray-500'}`}>
+                                                        <input type="radio" name="method" className="hidden" checked={formData.selectedMethod === key} onChange={() => setFormData({ ...formData, selectedMethod: key })} />
                                                         {key === 'commute' ? '通所' : key === 'visit' ? '訪問' : key === 'phone' ? '電話' : key === 'line' ? 'LINE' : key === 'discord' ? 'Discord' : 'Googleフォーム'}
                                                     </label>
                                                 ))}
@@ -700,7 +695,16 @@
                                         <div className="glass p-5 rounded-xl flex items-end gap-4">
                                             <div className="flex-1">
                                                 <label className="block text-sm font-bold text-gray-600 mb-1">記録者 <span className="text-red-500">*</span></label>
-                                                <input type="text" className="input-field bg-white" placeholder="入力してください" value={formData.recorder} onChange={e => setFormData({ ...formData, recorder: e.target.value })} />
+                                                <select className="input-field bg-white" value={formData.recorder} onChange={e => setFormData({ ...formData, recorder: e.target.value })}>
+                                                    <option value="">選択してください</option>
+                                                    <option value="三宮健人">三宮健人</option>
+                                                    <option value="久保田菜生">久保田菜生</option>
+                                                    <option value="廣瀬心咲">廣瀬心咲</option>
+                                                    <option value="西原昌憲">西原昌憲</option>
+                                                    <option value="髙野莉名">髙野莉名</option>
+                                                    <option value="広門雅史">広門雅史</option>
+                                                    <option value="船橋琴未">船橋琴未</option>
+                                                </select>
                                             </div>
                                             <div className="flex-1">
                                                 <label className="block text-sm font-bold text-gray-600 mb-1">確認者</label>
@@ -786,7 +790,7 @@
                                                         <td className="p-3">{rec.implementationDate}</td>
                                                         <td className="p-3 font-bold">{user ? user.name : '削除済ユーザー'}</td>
                                                         <td className="p-3 text-sm">
-                                                            {Object.keys(rec.methods).filter(k => rec.methods[k]).map(k => k === 'commute' ? '通所' : k === 'visit' ? '訪問' : k === 'phone' ? '電話' : k === 'line' ? 'LINE' : k === 'discord' ? 'Discord' : k === 'googleForm' ? 'Googleフォーム' : k).join('・')}
+                                                            {(() => { const m = { commute: '通所', visit: '訪問', phone: '電話', line: 'LINE', discord: 'Discord', googleForm: 'Googleフォーム' }; return rec.selectedMethod ? (m[rec.selectedMethod] || rec.selectedMethod) : (rec.methods ? Object.keys(rec.methods).filter(k => rec.methods[k]).map(k => m[k] || k).join('・') : ''); })()}
                                                         </td>
                                                         <td className="p-3 text-sm">{rec.recorder}</td>
                                                         <td className="p-3 text-right flex justify-end gap-2">

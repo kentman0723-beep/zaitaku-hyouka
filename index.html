@@ -408,23 +408,25 @@
 
                 let instruction = "";
                 if (targetField === 'condition') {
-                    instruction = "入力されたキーワードを元に、「体調について」の報告文章を作成してください。キーワードの意味を汲み取り、睡眠リズム、気分の安定度などに触れ、福祉支援記録として適切な「です・ます」調の文章にしてください。";
+                    instruction = "入力されたキーワードを元に、「1週間の体調について」の週評価報告文章を2〜3文程度で簡潔に作成してください。支援員が利用者に聞き取りを行い、1週間を通しての体調を評価した記録です。「本日」ではなく「今週」「この1週間」という視点で記述してください。福祉支援記録として適切な「です・ます」調の文章にしてください。";
                 } else if (targetField === 'workContent') {
-                    instruction = "入力されたキーワードを元に、「在宅での作業内容について」の報告文章を作成してください。キーワードから具体的な作業項目、進捗状況、集中度などを膨らませて記述し、福祉支援記録として適切な「です・ます」調の文章にしてください。";
+                    instruction = "入力されたキーワードを元に、「1週間の在宅での作業内容について」の週評価報告文章を2〜3文程度で簡潔に作成してください。支援員が利用者に聞き取りを行い、1週間を通しての作業状況を評価した記録です。「本日」ではなく「今週」「この1週間」という視点で記述してください。福祉支援記録として適切な「です・ます」調の文章にしてください。";
                 } else if (targetField === 'goals') {
-                    instruction = "入力されたキーワードを元に、「今後の目標」の報告文章を作成してください。次週に向けた具体的で前向きな目標として記述し、福祉支援記録として適切な「です・ます」調の文章にしてください。";
+                    instruction = "入力されたキーワードを元に、「今後の目標」の週評価報告文章を2〜3文程度で簡潔に作成してください。支援員が利用者との聞き取りを踏まえ、来週に向けた目標を記録したものです。福祉支援記録として適切な「です・ます」調の文章にしてください。";
                 }
 
                 const prompt = `
                     あなたは障害福祉サービスの就労継続支援B型の支援員です。
-                    以下の「キーワード」を元に、指定された項目の報告文章を作成してください。
+                    利用者への聞き取りを元に、週間評価の報告文章を作成してください。
+                    これは「週評価」であり、1週間を通しての状況を支援員がまとめた記録です。
+                    「本日」「今日」という表現は使わず、「今週」「この1週間」という視点で書いてください。
                     
-                    【キーワード】
+                    【聞き取りキーワード】
                     ${currentText}
 
                     【指示】
                     ${instruction}
-                    出力は作成した文章のみを行ってください（JSONではなく、プレーンテキストで出力）。
+                    出力は作成した文章のみを行ってください（JSONではなく、プレーンテキストで出力）。文章は2〜3文に収めてください。
                 `;
 
                 // 試行するモデルのリスト
@@ -608,10 +610,10 @@
                                             </div>
                                             <div>
                                                 <label className="block text-sm font-bold text-gray-600 mb-1">対象期間 (自動)</label>
-                                                <div className="flex items-center gap-2">
-                                                    <input type="date" value={formData.periodStart} readOnly className="input-field bg-gray-100 text-gray-500" />
-                                                    <span>~</span>
-                                                    <input type="date" value={formData.periodEnd} readOnly className="input-field bg-gray-100 text-gray-500" />
+                                                <div className="flex items-center gap-1">
+                                                    <input type="date" value={formData.periodStart} readOnly className="input-field bg-gray-100 text-gray-500 text-xs" style={{ minWidth: 0, flex: 1, padding: '0.5rem 0.25rem' }} />
+                                                    <span className="text-gray-400 flex-shrink-0">~</span>
+                                                    <input type="date" value={formData.periodEnd} readOnly className="input-field bg-gray-100 text-gray-500 text-xs" style={{ minWidth: 0, flex: 1, padding: '0.5rem 0.25rem' }} />
                                                 </div>
                                             </div>
                                         </div>
@@ -784,7 +786,7 @@
                                                         <td className="p-3">{rec.implementationDate}</td>
                                                         <td className="p-3 font-bold">{user ? user.name : '削除済ユーザー'}</td>
                                                         <td className="p-3 text-sm">
-                                                            {Object.keys(rec.methods).filter(k => rec.methods[k]).join(', ')}
+                                                            {Object.keys(rec.methods).filter(k => rec.methods[k]).map(k => k === 'commute' ? '通所' : k === 'visit' ? '訪問' : k === 'phone' ? '電話' : k === 'line' ? 'LINE' : k === 'discord' ? 'Discord' : k === 'googleForm' ? 'Googleフォーム' : k).join('・')}
                                                         </td>
                                                         <td className="p-3 text-sm">{rec.recorder}</td>
                                                         <td className="p-3 text-right flex justify-end gap-2">

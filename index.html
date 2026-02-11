@@ -199,7 +199,8 @@
             Sparkles: () => <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z" /></svg>,
             Download: () => <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>,
             Trash: () => <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>,
-            Settings: () => <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.72l-.15.1a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.72v-.51a2 2 0 0 1 1-1.72l.15-.1a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" /><circle cx="12" cy="12" r="3" /></svg>
+            Settings: () => <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.72l-.15.1a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.72v-.51a2 2 0 0 1 1-1.72l.15-.1a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" /><circle cx="12" cy="12" r="3" /></svg>,
+            Calendar: () => <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /><path d="M8 14l2 2 4-4" /></svg>
         };
 
         // --- ユーティリティ ---
@@ -213,10 +214,13 @@
         // --- メインコンポーネント ---
         const App = () => {
             // State
-            const [view, setView] = useState('input'); // input, users, history, settings
+            const [view, setView] = useState('input'); // input, monthly, users, history, settings
             const [users, setUsers] = useState([]);
             const [records, setRecords] = useState([]);
-            const [supabaseStatus, setSupabaseStatus] = useState('connecting'); // connecting, connected, error
+            const [supabaseStatus, setSupabaseStatus] = useState('connecting');
+
+            // あいうえお順にソートした利用者リスト
+            const sortedUsers = useMemo(() => [...users].sort((a, b) => a.name.localeCompare(b.name, 'ja')), [users]);
 
             // APIキーの初期化：手動入力があればそれを優先、なければローカルストレージ
             const [apiKey, setApiKey] = useState(() => {
@@ -245,6 +249,30 @@
                 workContent: false,
                 goals: false
             });
+
+            // --- 月1達成度評価 State ---
+            const now = new Date();
+            const [monthlyFormData, setMonthlyFormData] = useState({
+                userId: '',
+                targetYear: now.getFullYear(),
+                targetMonth: now.getMonth() + 1,
+                implementationDate: now.toISOString().split('T')[0],
+                timeStart: '10:00',
+                timeEnd: '10:15',
+                method: 'commute',
+                methodOther: '',
+                trainingGoal: '',
+                activities: '',
+                achievement: '',
+                issues: '',
+                improvementPlan: '',
+                healthNotes: '',
+                otherNotes: '',
+                workValidity: '',
+                evaluator: '近藤恵子',
+                previousEvalDate: ''
+            });
+            const [monthlyLoading, setMonthlyLoading] = useState({});
 
             // --- Supabase ヘルパー関数 ---
             const loadFromSupabase = async () => {
@@ -543,6 +571,127 @@
                 XLSX.writeFile(workbook, `${fileName}.xlsx`);
             };
 
+            // --- 月1達成度評価: 週評価データから自動抽出 ---
+            const autoPopulateMonthly = () => {
+                if (!monthlyFormData.userId) { alert('利用者を選択してください'); return; }
+                const year = monthlyFormData.targetYear;
+                const month = monthlyFormData.targetMonth;
+                const userRecords = records.filter(r => {
+                    if (r.userId !== monthlyFormData.userId) return false;
+                    const d = new Date(r.implementationDate);
+                    return d.getFullYear() === year && (d.getMonth() + 1) === month;
+                }).sort((a, b) => new Date(a.implementationDate) - new Date(b.implementationDate));
+
+                if (userRecords.length === 0) {
+                    alert(`${year}年${month}月の週評価データが見つかりません。`);
+                    return;
+                }
+
+                const goalTexts = userRecords.map(r => r.goals).filter(Boolean);
+                const workTexts = userRecords.map(r => r.workContent).filter(Boolean);
+                const condTexts = userRecords.map(r => r.condition).filter(Boolean);
+
+                setMonthlyFormData(prev => ({
+                    ...prev,
+                    trainingGoal: goalTexts.length > 0 ? goalTexts[goalTexts.length - 1] : '（データなし）',
+                    activities: workTexts.length > 0 ? workTexts.join('\n') : '（データなし）',
+                    achievement: condTexts.length > 0 ? condTexts.join('\n') : '（データなし）'
+                }));
+            };
+
+            // --- 月1達成度評価: AI生成 ---
+            const generateMonthlyContent = async (targetField) => {
+                const currentKey = apiKey || MANUAL_API_KEY;
+                if (!currentKey) { alert('APIキーが必要です。設定画面で入力してください。'); setView('settings'); return; }
+
+                const currentText = monthlyFormData[targetField];
+                if (!currentText) { alert('キーワードを入力してからボタンを押してください。'); return; }
+
+                setMonthlyLoading(prev => ({ ...prev, [targetField]: true }));
+
+                const user = users.find(u => u.id === monthlyFormData.userId);
+                const userName = user ? user.name : '利用者';
+
+                const instructions = {
+                    issues: `入力されたキーワードを元に、在宅就労の「課題」を2〜3文で作成してください。利用者${userName}さんの就労達成度評価における課題として適切な内容にしてください。`,
+                    improvementPlan: `入力されたキーワードを元に、「今後における課題の改善の方針」を2〜3文で作成してください。利用者${userName}さんの在宅就労における課題改善の方針として、具体的な支援方法を含めてください。`,
+                    healthNotes: `入力されたキーワードを元に、「健康・体調面での留意事項」を2〜3文で作成してください。在宅就労における健康管理の観点から、連絡方法や体調確認の方法を含めてください。`,
+                    otherNotes: `入力されたキーワードを元に、「その他特記事項」を1〜2文で簡潔に作成してください。`,
+                    workValidity: `入力されたキーワードを元に、「在宅就労時の妥当性」を2〜3文で作成してください。利用者${userName}さんが在宅で就労を継続することの妥当性について、作業報告の状況や自宅環境の観点から評価してください。`
+                };
+
+                const prompt = `
+                    あなたは障害福祉サービスの就労継続支援B型の支援員です。
+                    在宅における就労達成度評価シートの記入を行っています。
+                    
+                    【キーワード】
+                    ${currentText}
+
+                    【指示】
+                    ${instructions[targetField]}
+                    福祉支援記録として適切な「です・ます」調の文章にしてください。
+                    出力はプレーンテキストのみ。
+                `;
+
+                const modelsToTry = ['gemini-2.0-flash', 'gemini-flash-latest', 'gemini-1.5-flash-latest', 'gemini-pro'];
+                let success = false, lastError = null;
+                try {
+                    if (!window.GoogleGenerativeAI) throw new Error('AI SDKが読み込まれていません。');
+                    const genAI = new window.GoogleGenerativeAI(currentKey);
+                    for (const modelName of modelsToTry) {
+                        try {
+                            const model = genAI.getGenerativeModel({ model: modelName });
+                            const result = await model.generateContent(prompt);
+                            const text = (await result.response).text();
+                            if (text) {
+                                setMonthlyFormData(prev => ({ ...prev, [targetField]: text.trim() }));
+                                success = true;
+                                break;
+                            }
+                        } catch (e) { lastError = e; }
+                    }
+                    if (!success) throw lastError || new Error('全モデルで失敗');
+                } catch (e) {
+                    alert(`AI生成エラー: ${e.message}`);
+                } finally {
+                    setMonthlyLoading(prev => ({ ...prev, [targetField]: false }));
+                }
+            };
+
+            // --- 月1達成度評価: Excel出力 ---
+            const exportMonthlyExcel = () => {
+                const user = users.find(u => u.id === monthlyFormData.userId);
+                if (!user) { alert('利用者を選択してください'); return; }
+                const d = monthlyFormData;
+                const methodMap = { commute: '通所', visit: '訪問', other: 'その他' };
+                const methodStr = d.method === 'other' ? `その他（${d.methodOther}）` : (methodMap[d.method] || d.method);
+
+                const rows = [{
+                    '対象年月': `${d.targetYear}年${d.targetMonth}月`,
+                    '対象者名': user.name,
+                    '受給者証番号': user.number,
+                    '実施日': getFormattedDate(d.implementationDate),
+                    '実施時間': `${d.timeStart}～${d.timeEnd}`,
+                    '実施方法': methodStr,
+                    '訓練目標': d.trainingGoal,
+                    '取組内容': d.activities,
+                    '訓練目標に対する達成度': d.achievement,
+                    '課題': d.issues,
+                    '今後における課題の改善の方針': d.improvementPlan,
+                    '健康・体調面での留意事項': d.healthNotes,
+                    'その他特記事項': d.otherNotes,
+                    '在宅就労時の妥当性': d.workValidity,
+                    '評価実施者': d.evaluator,
+                    '前回の達成度評価日': d.previousEvalDate ? getFormattedDate(d.previousEvalDate) : ''
+                }];
+
+                const ws = XLSX.utils.json_to_sheet(rows);
+                ws['!cols'] = Array(16).fill({ wch: 30 });
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, '達成度評価');
+                XLSX.writeFile(wb, `${user.name}_${d.targetYear}年${d.targetMonth}月_達成度評価.xlsx`);
+            };
+
             return (
                 <div className="flex h-screen overflow-hidden">
                     {/* サイドバー */}
@@ -560,7 +709,10 @@
                         </div>
                         <nav className="flex-1 p-4 space-y-2">
                             <button onClick={() => setView('input')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition ${view === 'input' ? 'bg-green-50 text-green-700' : 'text-gray-600 hover:bg-gray-50'}`}>
-                                <Icons.FilePlus /> 評価入力
+                                <Icons.FilePlus /> 週評価入力
+                            </button>
+                            <button onClick={() => setView('monthly')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition ${view === 'monthly' ? 'bg-amber-50 text-amber-700' : 'text-gray-600 hover:bg-gray-50'}`}>
+                                <Icons.Calendar /> 月1達成度評価
                             </button>
                             <button onClick={() => setView('users')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition ${view === 'users' ? 'bg-green-50 text-green-700' : 'text-gray-600 hover:bg-gray-50'}`}>
                                 <Icons.Users /> 利用者管理
@@ -599,7 +751,7 @@
                                                 className="input-field font-bold text-lg"
                                             >
                                                 <option value="">選択してください</option>
-                                                {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                                                {sortedUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
                                             </select>
                                         </div>
 
@@ -883,6 +1035,157 @@
                                         ※入力すると自動的にブラウザに保存されます。サーバーには送信されません。<br />
                                         ※または、コード内の <code>MANUAL_API_KEY</code> に直接記入することも可能です。
                                     </p>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* 5. 月1達成度評価 */}
+                        {view === 'monthly' && (
+                            <div className="max-w-4xl mx-auto space-y-6">
+                                <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                                    <span className="bg-amber-500 w-2 h-8 rounded-full inline-block"></span>
+                                    在宅における就労達成度評価シート
+                                </h2>
+
+                                {/* 対象年月・利用者選択 */}
+                                <div className="glass p-6 rounded-xl">
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-bold text-gray-600 mb-1">対象年月</label>
+                                            <div className="flex gap-2">
+                                                <select className="input-field" value={monthlyFormData.targetYear} onChange={e => setMonthlyFormData({ ...monthlyFormData, targetYear: Number(e.target.value) })}>
+                                                    {[2024, 2025, 2026, 2027, 2028].map(y => <option key={y} value={y}>{`令和${y - 2018}年 (${y})`}</option>)}
+                                                </select>
+                                                <select className="input-field" value={monthlyFormData.targetMonth} onChange={e => setMonthlyFormData({ ...monthlyFormData, targetMonth: Number(e.target.value) })}>
+                                                    {[...Array(12)].map((_, i) => <option key={i + 1} value={i + 1}>{i + 1}月</option>)}
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-bold text-gray-600 mb-1">対象者名 <span className="text-red-500">*</span></label>
+                                            <select className="input-field font-bold" value={monthlyFormData.userId} onChange={e => setMonthlyFormData({ ...monthlyFormData, userId: e.target.value })}>
+                                                <option value="">選択してください</option>
+                                                {sortedUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-bold text-gray-600 mb-1">受給者証番号</label>
+                                            <input type="text" className="input-field bg-gray-100 text-gray-500" readOnly value={monthlyFormData.userId ? (users.find(u => u.id === monthlyFormData.userId)?.number || '') : ''} />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* 実施情報 */}
+                                <div className="glass p-6 rounded-xl">
+                                    <h3 className="font-bold text-gray-700 mb-4 border-b pb-2">実施情報</h3>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-bold text-gray-600 mb-1">実施日</label>
+                                            <input type="date" className="input-field" value={monthlyFormData.implementationDate} onChange={e => setMonthlyFormData({ ...monthlyFormData, implementationDate: e.target.value })} />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-bold text-gray-600 mb-1">実施時間（15分間）</label>
+                                            <div className="flex items-center gap-2">
+                                                <input type="time" className="input-field" value={monthlyFormData.timeStart} onChange={e => {
+                                                    const start = e.target.value;
+                                                    const [h, m] = start.split(':').map(Number);
+                                                    const endMin = m + 15;
+                                                    const endH = h + Math.floor(endMin / 60);
+                                                    const end = `${String(endH).padStart(2, '0')}:${String(endMin % 60).padStart(2, '0')}`;
+                                                    setMonthlyFormData({ ...monthlyFormData, timeStart: start, timeEnd: end });
+                                                }} />
+                                                <span className="text-gray-400">～</span>
+                                                <input type="time" className="input-field bg-gray-100 text-gray-500" readOnly value={monthlyFormData.timeEnd} />
+                                            </div>
+                                            <p className="text-xs text-red-400 mt-1">※10～12時、13～15時の間で設定（12～13時は休憩）</p>
+                                        </div>
+                                    </div>
+                                    <div className="mt-4">
+                                        <label className="block text-sm font-bold text-gray-600 mb-2">実施方法</label>
+                                        <div className="flex gap-3">
+                                            {[['commute', '通所'], ['visit', '訪問'], ['other', 'その他']].map(([key, label]) => (
+                                                <label key={key} className={`cursor-pointer px-4 py-2 rounded-lg border text-sm transition ${monthlyFormData.method === key ? 'bg-amber-100 border-amber-500 text-amber-800 font-bold' : 'bg-white border-gray-200 text-gray-500'}`}>
+                                                    <input type="radio" name="mmethod" className="hidden" checked={monthlyFormData.method === key} onChange={() => setMonthlyFormData({ ...monthlyFormData, method: key })} />
+                                                    {label}
+                                                </label>
+                                            ))}
+                                            {monthlyFormData.method === 'other' && (
+                                                <input type="text" className="input-field w-48" placeholder="具体的に入力" value={monthlyFormData.methodOther} onChange={e => setMonthlyFormData({ ...monthlyFormData, methodOther: e.target.value })} />
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* 週評価からの自動抽出ボタン */}
+                                <div className="flex justify-center">
+                                    <button onClick={autoPopulateMonthly} className="btn bg-blue-500 text-white hover:bg-blue-600 px-6 py-3 shadow-lg transform hover:-translate-y-1 transition">
+                                        📋 週評価データから自動抽出（青枠の項目）
+                                    </button>
+                                </div>
+
+                                {/* 青い項目: 週評価から自動生成 */}
+                                <div className="glass p-6 rounded-xl space-y-5 border-l-4 border-blue-400">
+                                    <h3 className="font-bold text-blue-600 mb-2">📘 週評価データからの自動抽出項目</h3>
+                                    <div>
+                                        <label className="block text-sm font-bold text-gray-600 mb-1">訓練目標</label>
+                                        <textarea className="input-field h-20 bg-blue-50 border-blue-200" value={monthlyFormData.trainingGoal} onChange={e => setMonthlyFormData({ ...monthlyFormData, trainingGoal: e.target.value })} placeholder="週評価の目標から自動抽出されます" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-bold text-gray-600 mb-1">取組内容</label>
+                                        <textarea className="input-field h-28 bg-blue-50 border-blue-200" value={monthlyFormData.activities} onChange={e => setMonthlyFormData({ ...monthlyFormData, activities: e.target.value })} placeholder="週評価の作業内容から自動抽出されます" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-bold text-gray-600 mb-1">訓練目標に対する達成度</label>
+                                        <textarea className="input-field h-24 bg-blue-50 border-blue-200" value={monthlyFormData.achievement} onChange={e => setMonthlyFormData({ ...monthlyFormData, achievement: e.target.value })} placeholder="週評価の体調・状況から自動抽出されます" />
+                                    </div>
+                                </div>
+
+                                {/* 赤い項目: AI生成対応 */}
+                                <div className="glass p-6 rounded-xl space-y-5 border-l-4 border-red-400">
+                                    <h3 className="font-bold text-red-600 mb-2">📕 評価・分析項目（AI生成対応）</h3>
+                                    {[
+                                        ['issues', '課題', '例：調べ方が分からない、モチベーション維持'],
+                                        ['improvementPlan', '今後における課題の改善の方針', '例：手順を詳しく教える、楽しく取り組む工夫'],
+                                        ['healthNotes', '健康・体調面での留意事項', '例：月1回健康面確認、LINEやDiscordで連絡'],
+                                        ['otherNotes', 'その他特記事項', '例：特になし'],
+                                        ['workValidity', '在宅就労時の妥当性', '例：作業報告あり、自宅環境が整っている']
+                                    ].map(([field, label, placeholder]) => (
+                                        <div key={field}>
+                                            <div className="flex justify-between items-center mb-1">
+                                                <label className="block text-sm font-bold text-gray-600">{label}</label>
+                                                <button
+                                                    onClick={() => generateMonthlyContent(field)}
+                                                    disabled={monthlyLoading[field]}
+                                                    className="btn btn-ai rounded-full flex items-center gap-1"
+                                                >
+                                                    {monthlyLoading[field] ? <span className="loading-dots">生成中</span> : <><Icons.Sparkles /> AI作成</>}
+                                                </button>
+                                            </div>
+                                            <textarea
+                                                className="input-field h-24 bg-red-50 border-red-200"
+                                                value={monthlyFormData[field]}
+                                                onChange={e => setMonthlyFormData({ ...monthlyFormData, [field]: e.target.value })}
+                                                placeholder={placeholder}
+                                            />
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {/* 署名・出力 */}
+                                <div className="glass p-5 rounded-xl">
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                                        <div>
+                                            <label className="block text-sm font-bold text-gray-600 mb-1">評価実施者</label>
+                                            <input type="text" className="input-field bg-gray-100 text-gray-500" value={monthlyFormData.evaluator} readOnly />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-bold text-gray-600 mb-1">前回の達成度評価日</label>
+                                            <input type="date" className="input-field" value={monthlyFormData.previousEvalDate} onChange={e => setMonthlyFormData({ ...monthlyFormData, previousEvalDate: e.target.value })} />
+                                        </div>
+                                        <button onClick={exportMonthlyExcel} className="btn btn-secondary h-11 px-6 shadow-lg transform hover:-translate-y-1">
+                                            <Icons.Download /> Excel出力
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         )}

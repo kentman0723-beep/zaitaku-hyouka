@@ -1,0 +1,913 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>スマート在宅週評価システム</title>
+
+    <!-- スタイル・ライブラリ読み込み -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Excel出力用ライブラリ (SheetJS) -->
+    <script lang="javascript" src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    <!-- Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+
+
+    <script type="importmap">
+      {
+        "imports": {
+          "@google/generative-ai": "https://esm.run/@google/generative-ai"
+        }
+      }
+    </script>
+    <script type="module">
+        import { GoogleGenerativeAI } from "@google/generative-ai";
+        window.GoogleGenerativeAI = GoogleGenerativeAI;
+    </script>
+
+    <style>
+        body {
+            font-family: 'Noto Sans JP', sans-serif;
+            background-color: #f3f4f6;
+            color: #1f2937;
+        }
+
+        /* カスタムスクロールバー */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8;
+        }
+
+        .glass {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+
+        .input-field {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #d1d5db;
+            border-radius: 0.5rem;
+            transition: all 0.2s;
+            background-color: #f9fafb;
+        }
+
+        .input-field:focus {
+            outline: none;
+            border-color: #10b981;
+            background-color: #ffffff;
+            box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+        }
+
+        .btn {
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            cursor: pointer;
+        }
+
+        .btn-primary {
+            background-color: #10b981;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: #059669;
+        }
+
+        .btn-secondary {
+            background-color: #3b82f6;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background-color: #2563eb;
+        }
+
+        .btn-danger {
+            background-color: #ef4444;
+            color: white;
+        }
+
+        .btn-ghost {
+            background-color: transparent;
+            color: #4b5563;
+        }
+
+        .btn-ghost:hover {
+            background-color: #e5e7eb;
+        }
+
+        /* AIボタン */
+        .btn-ai {
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            color: white;
+            font-size: 0.75rem;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            box-shadow: 0 2px 4px rgba(99, 102, 241, 0.3);
+        }
+
+        .btn-ai:hover {
+            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+            transform: translateY(-1px);
+        }
+
+        .btn-ai:disabled {
+            background: #cbd5e1;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .loading-dots:after {
+            content: '.';
+            animation: dots 1.5s steps(5, end) infinite;
+        }
+
+        @keyframes dots {
+
+            0%,
+            20% {
+                content: '.';
+            }
+
+            40% {
+                content: '..';
+            }
+
+            60% {
+                content: '...';
+            }
+
+            80%,
+            100% {
+                content: '';
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        // ★重要★ APIキーをここに直接入力してください（シングルクォーテーションの間）
+        // 例: const MANUAL_API_KEY = 'AIzaSyDBAaY9GNe9kaGPtOfZqCDZjdu-tlVxVt8';
+        const MANUAL_API_KEY = 'AIzaSyDBAaY9GNe9kaGPtOfZqCDZjdu-tlVxVt8';
+
+        // --- Supabase 設定 ---
+        const SUPABASE_URL = 'https://rowvbhhwbgllfczvqkzx.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJvd3ZiaGh3YmdsbGZjenZxa3p4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA2NjgxNzksImV4cCI6MjA4NjI0NDE3OX0.kfIYof-B44s0M3nDHJ97oJVTucgV4EyJi8pyIvfvTMw';
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        const { useState, useEffect, useMemo } = React;
+
+        // --- アイコン (Lucide) ---
+        const Icons = {
+            Home: () => <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><polyline points="9 22 9 12 15 12 15 22" /></svg>,
+            Users: () => <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>,
+            FilePlus: () => <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="12" y1="18" x2="12" y2="12" /><line x1="9" y1="15" x2="15" y2="15" /></svg>,
+            Table: () => <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><line x1="3" y1="9" x2="21" y2="9" /><line x1="3" y1="15" x2="21" y2="15" /><line x1="12" y1="3" x2="12" y2="21" /></svg>,
+            Sparkles: () => <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z" /></svg>,
+            Download: () => <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>,
+            Trash: () => <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>,
+            Settings: () => <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.72l-.15.1a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.72v-.51a2 2 0 0 1 1-1.72l.15-.1a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" /><circle cx="12" cy="12" r="3" /></svg>
+        };
+
+        // --- ユーティリティ ---
+        const generateId = () => Math.random().toString(36).substr(2, 9);
+        const getFormattedDate = (date) => {
+            if (!date) return '';
+            const d = new Date(date);
+            return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
+        };
+
+        // --- メインコンポーネント ---
+        const App = () => {
+            // State
+            const [view, setView] = useState('input'); // input, users, history, settings
+            const [users, setUsers] = useState([]);
+            const [records, setRecords] = useState([]);
+            const [supabaseStatus, setSupabaseStatus] = useState('connecting'); // connecting, connected, error
+
+            // APIキーの初期化：手動入力があればそれを優先、なければローカルストレージ
+            const [apiKey, setApiKey] = useState(() => {
+                if (MANUAL_API_KEY) return MANUAL_API_KEY;
+                return localStorage.getItem('sw_api_key') || '';
+            });
+
+            // 入力フォームの状態
+            const [formData, setFormData] = useState({
+                userId: '',
+                implementationDate: new Date().toISOString().split('T')[0],
+                previousDate: '',
+                periodStart: '',
+                periodEnd: '',
+                methods: { commute: true, visit: false, phone: false, line: false, discord: false, googleForm: false },
+                condition: '',
+                workContent: '',
+                goals: '',
+                recorder: '',
+                manager: '近藤恵子'
+            });
+
+            // 生成中のステータス管理
+            const [loadingState, setLoadingState] = useState({
+                condition: false,
+                workContent: false,
+                goals: false
+            });
+
+            // --- Supabase ヘルパー関数 ---
+            const loadFromSupabase = async () => {
+                try {
+                    const { data: usersData, error: usersError } = await supabase.from('users').select('*');
+                    if (usersError) throw usersError;
+                    const mappedUsers = (usersData || []).map(u => ({ id: u.id, name: u.name, number: u.number || '' }));
+                    setUsers(mappedUsers);
+                    localStorage.setItem('sw_users', JSON.stringify(mappedUsers));
+
+                    const { data: recordsData, error: recordsError } = await supabase.from('records').select('*');
+                    if (recordsError) throw recordsError;
+                    const mappedRecords = (recordsData || []).map(r => ({
+                        id: r.id,
+                        userId: r.user_id,
+                        implementationDate: r.implementation_date,
+                        previousDate: r.previous_date,
+                        periodStart: r.period_start,
+                        periodEnd: r.period_end,
+                        methods: r.methods || {},
+                        condition: r.condition || '',
+                        workContent: r.work_content || '',
+                        goals: r.goals || '',
+                        recorder: r.recorder || '',
+                        manager: r.manager || '近藤恵子'
+                    }));
+                    setRecords(mappedRecords);
+                    localStorage.setItem('sw_records', JSON.stringify(mappedRecords));
+
+                    setSupabaseStatus('connected');
+                    console.log('✅ Supabase からデータを読み込みました');
+                } catch (e) {
+                    console.error('Supabase 読み込みエラー:', e);
+                    setSupabaseStatus('error');
+                    // フォールバック: localStorage から読み込み
+                    const savedUsers = localStorage.getItem('sw_users');
+                    const savedRecords = localStorage.getItem('sw_records');
+                    if (savedUsers) try { setUsers(JSON.parse(savedUsers)); } catch (e2) { }
+                    if (savedRecords) try { setRecords(JSON.parse(savedRecords)); } catch (e2) { }
+                }
+            };
+
+            const saveUserToSupabase = async (user) => {
+                try {
+                    const { error } = await supabase.from('users').upsert({ id: user.id, name: user.name, number: user.number || '' });
+                    if (error) throw error;
+                } catch (e) { console.error('ユーザー保存エラー:', e); }
+            };
+
+            const deleteUserFromSupabase = async (userId) => {
+                try {
+                    const { error } = await supabase.from('users').delete().eq('id', userId);
+                    if (error) throw error;
+                } catch (e) { console.error('ユーザー削除エラー:', e); }
+            };
+
+            const saveRecordToSupabase = async (record) => {
+                try {
+                    const { error } = await supabase.from('records').upsert({
+                        id: record.id,
+                        user_id: record.userId,
+                        implementation_date: record.implementationDate,
+                        previous_date: record.previousDate,
+                        period_start: record.periodStart,
+                        period_end: record.periodEnd,
+                        methods: record.methods,
+                        condition: record.condition,
+                        work_content: record.workContent,
+                        goals: record.goals,
+                        recorder: record.recorder,
+                        manager: record.manager
+                    });
+                    if (error) throw error;
+                } catch (e) { console.error('記録保存エラー:', e); }
+            };
+
+            const deleteRecordFromSupabase = async (recordId) => {
+                try {
+                    const { error } = await supabase.from('records').delete().eq('id', recordId);
+                    if (error) throw error;
+                } catch (e) { console.error('記録削除エラー:', e); }
+            };
+
+            // 初期ロード (Supabase優先、フォールバックはlocalStorage)
+            useEffect(() => {
+                loadFromSupabase();
+            }, []);
+
+            // localStorage バックアップ保存
+            useEffect(() => { localStorage.setItem('sw_users', JSON.stringify(users)); }, [users]);
+            useEffect(() => { localStorage.setItem('sw_records', JSON.stringify(records)); }, [records]);
+
+            // APIキーの変更監視・保存
+            useEffect(() => {
+                if (apiKey) localStorage.setItem('sw_api_key', apiKey);
+            }, [apiKey]);
+
+            // --- 自動計算ロジック ---
+            const handleDateChange = (date) => {
+                let newData = { ...formData, implementationDate: date };
+
+                if (formData.userId) {
+                    const userRecords = records
+                        .filter(r => r.userId === formData.userId && new Date(r.implementationDate) < new Date(date))
+                        .sort((a, b) => new Date(b.implementationDate) - new Date(a.implementationDate));
+
+                    if (userRecords.length > 0) {
+                        newData.previousDate = userRecords[0].implementationDate;
+                    } else {
+                        const prev = new Date(date);
+                        prev.setDate(prev.getDate() - 7);
+                        newData.previousDate = prev.toISOString().split('T')[0];
+                    }
+
+                    const implDateObj = new Date(date);
+                    const day = implDateObj.getDay();
+                    const diffToMon = (day === 0 ? -6 : 1) - day;
+
+                    const thisMon = new Date(implDateObj);
+                    thisMon.setDate(implDateObj.getDate() + diffToMon);
+
+                    const lastMon = new Date(thisMon);
+                    lastMon.setDate(thisMon.getDate() - 7);
+
+                    const lastSun = new Date(lastMon);
+                    lastSun.setDate(lastMon.getDate() + 6);
+
+                    newData.periodStart = lastMon.toISOString().split('T')[0];
+                    newData.periodEnd = lastSun.toISOString().split('T')[0];
+                }
+                setFormData(newData);
+            };
+
+            const handleUserChange = (uid) => {
+                setFormData(prev => ({ ...prev, userId: uid }));
+            };
+
+            useEffect(() => {
+                if (formData.userId) {
+                    handleDateChange(formData.implementationDate);
+                }
+            }, [formData.userId]);
+
+            // --- Gemini AI 生成 (項目ごと) ---
+            const generateSingleContent = async (targetField) => {
+                // APIキーチェック
+                const currentKey = apiKey || MANUAL_API_KEY;
+
+                if (!currentKey) {
+                    alert('AI機能を使用するには、APIキーが必要です。\nコード内の `MANUAL_API_KEY` に入力するか、設定画面で入力してください。\n設定画面へ移動します。');
+                    setView('settings');
+                    return;
+                }
+
+                // キーワードチェック
+                const currentText = formData[targetField];
+                if (!currentText) {
+                    alert('【重要】\n入力欄にキーワード（例：「元気」「データ入力」など）を入力してからボタンを押してください。\nAIはそのキーワードを元に文章を作成します。');
+                    return;
+                }
+
+                setLoadingState(prev => ({ ...prev, [targetField]: true }));
+
+                let instruction = "";
+                if (targetField === 'condition') {
+                    instruction = "入力されたキーワードを元に、「体調について」の報告文章を作成してください。キーワードの意味を汲み取り、睡眠リズム、気分の安定度などに触れ、福祉支援記録として適切な「です・ます」調の文章にしてください。";
+                } else if (targetField === 'workContent') {
+                    instruction = "入力されたキーワードを元に、「在宅での作業内容について」の報告文章を作成してください。キーワードから具体的な作業項目、進捗状況、集中度などを膨らませて記述し、福祉支援記録として適切な「です・ます」調の文章にしてください。";
+                } else if (targetField === 'goals') {
+                    instruction = "入力されたキーワードを元に、「今後の目標」の報告文章を作成してください。次週に向けた具体的で前向きな目標として記述し、福祉支援記録として適切な「です・ます」調の文章にしてください。";
+                }
+
+                const prompt = `
+                    あなたは障害福祉サービスの就労継続支援B型の支援員です。
+                    以下の「キーワード」を元に、指定された項目の報告文章を作成してください。
+                    
+                    【キーワード】
+                    ${currentText}
+
+                    【指示】
+                    ${instruction}
+                    出力は作成した文章のみを行ってください（JSONではなく、プレーンテキストで出力）。
+                `;
+
+                // 試行するモデルのリスト
+                const modelsToTry = [
+                    'gemini-2.0-flash',
+                    'gemini-flash-latest',
+                    'gemini-1.5-flash-latest',
+                    'gemini-pro'
+                ];
+
+                let success = false;
+                let lastError = null;
+
+                try {
+                    // SDKの初期化
+                    if (!window.GoogleGenerativeAI) {
+                        throw new Error("Google Generative AI SDKが読み込まれていません。インターネット接続を確認してください。");
+                    }
+
+                    const genAI = new window.GoogleGenerativeAI(currentKey);
+
+                    for (const modelName of modelsToTry) {
+                        try {
+                            console.log(`Trying model (SDK): ${modelName}...`);
+                            const model = genAI.getGenerativeModel({ model: modelName });
+
+                            const result = await model.generateContent(prompt);
+                            const response = await result.response;
+                            const text = response.text();
+
+                            if (text) {
+                                setFormData(prev => ({
+                                    ...prev,
+                                    [targetField]: text.trim()
+                                }));
+                                success = true;
+                                break;
+                            }
+                        } catch (e) {
+                            console.warn(`Model ${modelName} failed:`, e);
+                            lastError = e;
+                        }
+                    }
+
+                    if (!success) {
+                        throw lastError || new Error("全モデルで生成に失敗しました");
+                    }
+
+                } catch (e) {
+                    console.error("AI Generation Error:", e);
+                    alert(`AI生成エラー: ${e.message}\nしばらく待ってから再試行するか、管理者にお問い合わせください。`);
+                } finally {
+                    setLoadingState(prev => ({ ...prev, [targetField]: false }));
+                }
+            };
+
+            // --- 記録保存 ---
+            const saveRecord = async () => {
+                if (!formData.userId) { alert('利用者を選択してください'); return; }
+                if (!formData.recorder) { alert('記録者を入力してください'); return; }
+
+                const newRecord = { ...formData, id: generateId() };
+                setRecords([newRecord, ...records]);
+                await saveRecordToSupabase(newRecord);
+                alert('記録を保存しました（クラウド同期済み）');
+
+                // フォームリセット
+                setFormData(prev => ({
+                    ...prev,
+                    condition: '',
+                    workContent: '',
+                    goals: '',
+                    recorder: '' // 空欄に戻す
+                }));
+            };
+
+            // --- Excel出力 ---
+            const exportExcel = (targetRecords, fileName) => {
+                if (targetRecords.length === 0) { alert('出力するデータがありません'); return; }
+
+                const rows = targetRecords.map(rec => {
+                    const user = users.find(u => u.id === rec.userId);
+                    const methods = [
+                        rec.methods.commute ? '通所' : '',
+                        rec.methods.visit ? '訪問' : '',
+                        rec.methods.phone ? '電話' : '',
+                        rec.methods.line ? 'LINE' : '',
+                        rec.methods.discord ? 'Discord' : '',
+                        rec.methods.googleForm ? 'Googleフォーム' : ''
+                    ].filter(Boolean).join('・');
+
+                    return {
+                        "氏名": user ? user.name : '不明',
+                        "受給者証番号": user ? user.number : '',
+                        "実施日": getFormattedDate(rec.implementationDate),
+                        "前回実施日": getFormattedDate(rec.previousDate),
+                        "対象期間開始": getFormattedDate(rec.periodStart),
+                        "対象期間終了": getFormattedDate(rec.periodEnd),
+                        "実施方法": methods,
+                        "体調について": rec.condition,
+                        "作業内容": rec.workContent,
+                        "今後の目標": rec.goals,
+                        "記録者": rec.recorder,
+                        "確認者": rec.manager
+                    };
+                });
+
+                const worksheet = XLSX.utils.json_to_sheet(rows);
+                const wscols = [
+                    { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 },
+                    { wch: 20 }, { wch: 40 }, { wch: 40 }, { wch: 40 }, { wch: 10 }, { wch: 10 }
+                ];
+                worksheet['!cols'] = wscols;
+
+                const workbook = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(workbook, worksheet, "週評価記録");
+                XLSX.writeFile(workbook, `${fileName}.xlsx`);
+            };
+
+            return (
+                <div className="flex h-screen overflow-hidden">
+                    {/* サイドバー */}
+                    <div className="w-64 bg-white border-r flex flex-col shadow-lg z-10">
+                        <div className="p-6 border-b flex items-center gap-2 text-green-600">
+                            <Icons.Table />
+                            <h1 className="font-bold text-xl tracking-tight">スマート週評価</h1>
+                        </div>
+                        <nav className="flex-1 p-4 space-y-2">
+                            <button onClick={() => setView('input')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition ${view === 'input' ? 'bg-green-50 text-green-700' : 'text-gray-600 hover:bg-gray-50'}`}>
+                                <Icons.FilePlus /> 評価入力
+                            </button>
+                            <button onClick={() => setView('users')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition ${view === 'users' ? 'bg-green-50 text-green-700' : 'text-gray-600 hover:bg-gray-50'}`}>
+                                <Icons.Users /> 利用者管理
+                            </button>
+                            <button onClick={() => setView('history')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition ${view === 'history' ? 'bg-green-50 text-green-700' : 'text-gray-600 hover:bg-gray-50'}`}>
+                                <Icons.Table /> 記録一覧・出力
+                            </button>
+                            <button onClick={() => setView('settings')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition ${view === 'settings' ? 'bg-green-50 text-green-700' : 'text-gray-600 hover:bg-gray-50'}`}>
+                                <Icons.Settings /> 設定 (API)
+                            </button>
+                        </nav>
+                        <div className="p-4 text-xs text-gray-400 text-center">
+                            v3.0.0 Supabase
+                        </div>
+                    </div>
+
+                    {/* メインコンテンツ */}
+                    <main className="flex-1 overflow-y-auto bg-gray-50 p-8">
+
+                        {/* 1. 評価入力画面 */}
+                        {view === 'input' && (
+                            <div className="max-w-4xl mx-auto space-y-6">
+                                <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                                    <span className="bg-green-500 w-2 h-8 rounded-full inline-block"></span>
+                                    週評価の作成
+                                </h2>
+
+                                <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+                                    {/* 基本情報パネル */}
+                                    <div className="md:col-span-4 space-y-4">
+                                        <div className="glass p-5 rounded-xl">
+                                            <label className="block text-sm font-bold text-gray-600 mb-1">利用者 <span className="text-red-500">*</span></label>
+                                            <select
+                                                value={formData.userId}
+                                                onChange={e => handleUserChange(e.target.value)}
+                                                className="input-field font-bold text-lg"
+                                            >
+                                                <option value="">選択してください</option>
+                                                {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                                            </select>
+                                        </div>
+
+                                        <div className="glass p-5 rounded-xl space-y-4">
+                                            <div>
+                                                <label className="block text-sm font-bold text-gray-600 mb-1">実施日</label>
+                                                <input type="date" value={formData.implementationDate} onChange={e => handleDateChange(e.target.value)} className="input-field" />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-bold text-gray-600 mb-1">前回実施日 (自動)</label>
+                                                <input type="date" value={formData.previousDate} readOnly className="input-field bg-gray-100 text-gray-500" />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-bold text-gray-600 mb-1">対象期間 (自動)</label>
+                                                <div className="flex items-center gap-2">
+                                                    <input type="date" value={formData.periodStart} readOnly className="input-field bg-gray-100 text-gray-500" />
+                                                    <span>~</span>
+                                                    <input type="date" value={formData.periodEnd} readOnly className="input-field bg-gray-100 text-gray-500" />
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="glass p-5 rounded-xl space-y-4">
+                                            <label className="block text-sm font-bold text-gray-600 mb-2">実施方法</label>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                {Object.keys(formData.methods).map(key => (
+                                                    <label key={key} className={`cursor-pointer p-2 rounded-lg border text-center text-sm transition ${formData.methods[key] ? 'bg-green-100 border-green-500 text-green-800 font-bold' : 'bg-white border-gray-200 text-gray-500'}`}>
+                                                        <input type="checkbox" className="hidden" checked={formData.methods[key]} onChange={() => setFormData({ ...formData, methods: { ...formData.methods, [key]: !formData.methods[key] } })} />
+                                                        {key === 'commute' ? '通所' : key === 'visit' ? '訪問' : key === 'phone' ? '電話' : key === 'line' ? 'LINE' : key === 'discord' ? 'Discord' : 'Googleフォーム'}
+                                                    </label>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* コンテンツ入力パネル */}
+                                    <div className="md:col-span-8 space-y-4">
+                                        {/* メインテキストエリア */}
+                                        <div className="glass p-6 rounded-xl space-y-6">
+                                            {/* 体調 */}
+                                            <div>
+                                                <div className="flex justify-between items-center mb-1">
+                                                    <label className="block text-sm font-bold text-gray-600">体調について</label>
+                                                    <button
+                                                        onClick={() => generateSingleContent('condition')}
+                                                        disabled={loadingState.condition}
+                                                        className="btn btn-ai rounded-full flex items-center gap-1"
+                                                    >
+                                                        {loadingState.condition ? <span className="loading-dots">生成中</span> : <><Icons.Sparkles /> キーワードからAI作成</>}
+                                                    </button>
+                                                </div>
+                                                <textarea
+                                                    className="input-field h-24"
+                                                    value={formData.condition}
+                                                    onChange={e => setFormData({ ...formData, condition: e.target.value })}
+                                                    placeholder="キーワード（例：元気、睡眠OK）を入力してAIボタンを押すと文章になります"
+                                                />
+                                            </div>
+
+                                            {/* 作業内容 */}
+                                            <div>
+                                                <div className="flex justify-between items-center mb-1">
+                                                    <label className="block text-sm font-bold text-gray-600">在宅での作業内容について</label>
+                                                    <button
+                                                        onClick={() => generateSingleContent('workContent')}
+                                                        disabled={loadingState.workContent}
+                                                        className="btn btn-ai rounded-full flex items-center gap-1"
+                                                    >
+                                                        {loadingState.workContent ? <span className="loading-dots">生成中</span> : <><Icons.Sparkles /> キーワードからAI作成</>}
+                                                    </button>
+                                                </div>
+                                                <textarea
+                                                    className="input-field h-24"
+                                                    value={formData.workContent}
+                                                    onChange={e => setFormData({ ...formData, workContent: e.target.value })}
+                                                    placeholder="キーワード（例：データ入力、2時間集中）を入力してAIボタンを押すと文章になります"
+                                                />
+                                            </div>
+
+                                            {/* 目標 */}
+                                            <div>
+                                                <div className="flex justify-between items-center mb-1">
+                                                    <label className="block text-sm font-bold text-gray-600">今後の目標</label>
+                                                    <button
+                                                        onClick={() => generateSingleContent('goals')}
+                                                        disabled={loadingState.goals}
+                                                        className="btn btn-ai rounded-full flex items-center gap-1"
+                                                    >
+                                                        {loadingState.goals ? <span className="loading-dots">生成中</span> : <><Icons.Sparkles /> キーワードからAI作成</>}
+                                                    </button>
+                                                </div>
+                                                <textarea
+                                                    className="input-field h-24"
+                                                    value={formData.goals}
+                                                    onChange={e => setFormData({ ...formData, goals: e.target.value })}
+                                                    placeholder="キーワード（例：継続する、スピードアップ）を入力してAIボタンを押すと文章になります"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        {/* 署名・保存 */}
+                                        <div className="glass p-5 rounded-xl flex items-end gap-4">
+                                            <div className="flex-1">
+                                                <label className="block text-sm font-bold text-gray-600 mb-1">記録者 <span className="text-red-500">*</span></label>
+                                                <input type="text" className="input-field bg-white" placeholder="入力してください" value={formData.recorder} onChange={e => setFormData({ ...formData, recorder: e.target.value })} />
+                                            </div>
+                                            <div className="flex-1">
+                                                <label className="block text-sm font-bold text-gray-600 mb-1">確認者</label>
+                                                <input type="text" className="input-field bg-gray-100 text-gray-500" value={formData.manager} readOnly />
+                                            </div>
+                                            <button onClick={saveRecord} className="btn btn-primary h-11 px-8 shadow-lg transform hover:-translate-y-1">
+                                                記録を保存
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* 2. 利用者管理 */}
+                        {view === 'users' && (
+                            <div className="max-w-3xl mx-auto space-y-6">
+                                <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                                    <span className="bg-blue-500 w-2 h-8 rounded-full inline-block"></span>
+                                    利用者情報の登録
+                                </h2>
+
+                                <div className="glass p-6 rounded-xl">
+                                    <AddUserForm onAdd={(user) => {
+                                        const newUser = { ...user, id: generateId() };
+                                        setUsers([...users, newUser]);
+                                        saveUserToSupabase(newUser);
+                                    }} />
+                                </div>
+
+                                <div className="glass p-6 rounded-xl">
+                                    <h3 className="font-bold text-gray-700 mb-4 border-b pb-2">登録済み利用者 ({users.length}名)</h3>
+                                    {users.length === 0 ? <p className="text-gray-400">利用者が登録されていません</p> : (
+                                        <div className="grid gap-3">
+                                            {users.map(u => (
+                                                <div key={u.id} className="flex justify-between items-center p-3 bg-white rounded border hover:shadow-sm transition">
+                                                    <div>
+                                                        <div className="font-bold text-lg">{u.name}</div>
+                                                        <div className="text-sm text-gray-500">{u.number}</div>
+                                                    </div>
+                                                    <button onClick={() => { if (confirm('削除しますか？')) { deleteUserFromSupabase(u.id); setUsers(users.filter(user => user.id !== u.id)); } }} className="btn btn-ghost text-red-500">
+                                                        <Icons.Trash />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* 3. 履歴・出力 */}
+                        {view === 'history' && (
+                            <div className="max-w-5xl mx-auto space-y-6">
+                                <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                                    <span className="bg-yellow-500 w-2 h-8 rounded-full inline-block"></span>
+                                    記録一覧・Excel出力
+                                </h2>
+
+                                <div className="glass p-6 rounded-xl flex gap-4 items-center flex-wrap">
+                                    <h3 className="font-bold">一括操作:</h3>
+                                    <button onClick={() => exportExcel(records, '全利用者_在宅週評価')} className="btn btn-secondary">
+                                        <Icons.Download /> 全員の記録をExcel出力
+                                    </button>
+                                </div>
+
+                                <div className="glass p-6 rounded-xl">
+                                    <table className="w-full text-left border-collapse">
+                                        <thead>
+                                            <tr className="border-b text-sm text-gray-500">
+                                                <th className="p-3">実施日</th>
+                                                <th className="p-3">氏名</th>
+                                                <th className="p-3">方法</th>
+                                                <th className="p-3">記録者</th>
+                                                <th className="p-3 text-right">操作</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {records.map(rec => {
+                                                const user = users.find(u => u.id === rec.userId);
+                                                return (
+                                                    <tr key={rec.id} className="border-b hover:bg-gray-50 transition">
+                                                        <td className="p-3">{rec.implementationDate}</td>
+                                                        <td className="p-3 font-bold">{user ? user.name : '削除済ユーザー'}</td>
+                                                        <td className="p-3 text-sm">
+                                                            {Object.keys(rec.methods).filter(k => rec.methods[k]).join(', ')}
+                                                        </td>
+                                                        <td className="p-3 text-sm">{rec.recorder}</td>
+                                                        <td className="p-3 text-right flex justify-end gap-2">
+                                                            <button
+                                                                onClick={() => exportExcel([rec], `${user?.name}_${rec.implementationDate}_週評価`)}
+                                                                className="text-blue-600 hover:underline text-sm font-bold"
+                                                            >
+                                                                Excel出力
+                                                            </button>
+                                                            <button
+                                                                onClick={() => { if (confirm('削除しますか？')) { deleteRecordFromSupabase(rec.id); setRecords(records.filter(r => r.id !== rec.id)); } }}
+                                                                className="text-red-500 hover:underline text-sm"
+                                                            >
+                                                                削除
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                    {records.length === 0 && <p className="text-center text-gray-400 py-10">記録がありません</p>}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* 4. 設定 */}
+                        {view === 'settings' && (
+                            <div className="max-w-2xl mx-auto space-y-6">
+                                <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                                    <span className="bg-gray-500 w-2 h-8 rounded-full inline-block"></span>
+                                    システム設定
+                                </h2>
+
+                                {/* Supabase 接続状態 */}
+                                <div className={`glass p-6 rounded-xl border-l-4 ${supabaseStatus === 'connected' ? 'border-green-500' :
+                                    supabaseStatus === 'error' ? 'border-red-500' : 'border-yellow-500'
+                                    }`}>
+                                    <h3 className="font-bold mb-3">☁️ クラウドデータベース (Supabase)</h3>
+                                    <div className="flex items-center gap-3">
+                                        <span className={`inline-block w-3 h-3 rounded-full ${supabaseStatus === 'connected' ? 'bg-green-500' :
+                                            supabaseStatus === 'error' ? 'bg-red-500' : 'bg-yellow-500 animate-pulse'
+                                            }`}></span>
+                                        <span className="font-medium">
+                                            {supabaseStatus === 'connected' && '接続中 — データはクラウドに自動保存されます'}
+                                            {supabaseStatus === 'error' && '接続エラー — ローカル保存モードで動作中'}
+                                            {supabaseStatus === 'connecting' && '接続中...'}
+                                        </span>
+                                    </div>
+                                    {supabaseStatus === 'error' && (
+                                        <button onClick={() => { setSupabaseStatus('connecting'); loadFromSupabase(); }} className="btn btn-primary mt-3 text-sm">
+                                            再接続
+                                        </button>
+                                    )}
+                                    <p className="text-xs text-gray-400 mt-3">
+                                        利用者情報・記録はSupabaseクラウドに保存され、ブラウザを変更しても保持されます。
+                                    </p>
+                                </div>
+
+                                <div className="glass p-6 rounded-xl border-l-4 border-indigo-500">
+                                    <h3 className="font-bold mb-4">Gemini APIキーの設定</h3>
+                                    <p className="text-sm text-gray-600 mb-4">
+                                        AI自動生成機能を利用するには、Google Gemini APIキーが必要です。<br />
+                                        <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-indigo-600 underline hover:text-indigo-800">
+                                            Google AI Studioでキーを取得する
+                                        </a>
+                                    </p>
+                                    <div className="relative">
+                                        <input
+                                            type="password"
+                                            className="input-field font-mono pr-10"
+                                            placeholder="AIzaSy..."
+                                            value={apiKey}
+                                            onChange={e => setApiKey(e.target.value)}
+                                        />
+                                        <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-gray-400">
+                                            {apiKey ? <span className="text-green-500">✔</span> : null}
+                                        </div>
+                                    </div>
+                                    <p className="text-xs text-gray-400 mt-2">
+                                        ※入力すると自動的にブラウザに保存されます。サーバーには送信されません。<br />
+                                        ※または、コード内の <code>MANUAL_API_KEY</code> に直接記入することも可能です。
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+
+                    </main>
+                </div>
+            );
+        };
+
+        // サブコンポーネント: 利用者追加フォーム
+        const AddUserForm = ({ onAdd }) => {
+            const [name, setName] = useState('');
+            const [number, setNumber] = useState('');
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                if (!name) return;
+                onAdd({ name, number });
+                setName('');
+                setNumber('');
+            };
+
+            return (
+                <form onSubmit={handleSubmit} className="flex gap-4 items-end">
+                    <div className="flex-1">
+                        <label className="block text-sm font-bold text-gray-600 mb-1">氏名</label>
+                        <input className="input-field" value={name} onChange={e => setName(e.target.value)} placeholder="例：山田 太郎" />
+                    </div>
+                    <div className="flex-1">
+                        <label className="block text-sm font-bold text-gray-600 mb-1">受給者証番号</label>
+                        <input className="input-field" value={number} onChange={e => setNumber(e.target.value)} placeholder="例：0000123456" />
+                    </div>
+                    <button type="submit" className="btn btn-primary h-11 px-6">追加</button>
+                </form>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+
+</html>

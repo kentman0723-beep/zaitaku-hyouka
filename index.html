@@ -557,18 +557,18 @@
                 // 各方法のチェック状態を判定
                 const isMethod = (key) => rec.selectedMethod === key ? '✔' : '';
 
-                // シートデータ（配列の配列）
+                // シートデータ（配列の配列）- A~I列の9列構成
                 const data = [
                     // 行0: タイトル行
                     ['評価 ※1', '', '', '', '※1 評価は作業・訓練対象日(期間最終日)の1週間以内に実施すること', '', '', '', ''],
                     // 行1: 実施日
                     ['実施日', getFormattedDate(rec.implementationDate), '', '', '前回実施日', getFormattedDate(rec.previousDate), '', '', ''],
                     // 行2: 方法（上段）
-                    ['方法', '', 'LINE', isMethod('line'), 'Discord', isMethod('discord'), 'Googleフォーム', isMethod('googleForm'), '電話', isMethod('phone')],
+                    ['方法', '', 'LINE', isMethod('line'), 'Discord', isMethod('discord'), 'Googleフォーム', isMethod('googleForm'), ''],
                     // 行3: 方法（下段）
-                    ['', '', '訪問', isMethod('visit'), '通所', isMethod('commute'), '', '', '', ''],
+                    ['', '', '訪問', isMethod('visit'), '通所', isMethod('commute'), '電話', isMethod('phone'), ''],
                     // 行4: 対象期間
-                    ['対象期間', getFormattedDate(rec.periodStart), '', '～', getFormattedDate(rec.periodEnd), '', '', '', '(評価は一週間ごとに実施)'],
+                    ['対象期間', getFormattedDate(rec.periodStart), '', '～', getFormattedDate(rec.periodEnd), '', '', '', ''],
                     // 行5: モニタリング内容（ヘッダー）
                     ['', '', '', '', 'モニタリング内容', '', '', '', ''],
                     // 行6-8: 体調について（3行分）
@@ -584,25 +584,24 @@
                     ['', '', '', '', '', '', '', '', ''],
                     ['', '', '', '', '', '', '', '', ''],
                     // 行15: 記録者・確認者
-                    ['記録者', rec.recorder || '', '', '', '確認者(サービス管理責任者)', rec.manager || '', '', '', ''],
+                    ['記録者', rec.recorder || '', '', '', '確認者(サービス\n管理責任者)', rec.manager || '', '', '', ''],
                     // 行16: フッターメモ
-                    ['', '', '', '', '', '', '', '評価内容はサービス管理責任者が必ず確認すること', ''],
+                    ['', '', '', '', '', '', '評価内容はサービス管理責任者が必ず確認すること', '', ''],
                 ];
 
                 const ws = XLSX.utils.aoa_to_sheet(data);
 
-                // 列幅設定
+                // 列幅設定 (A~I列の9列)
                 ws['!cols'] = [
                     { wch: 14 }, // A: ラベル
-                    { wch: 8 },  // B
+                    { wch: 10 }, // B
                     { wch: 10 }, // C
                     { wch: 5 },  // D
                     { wch: 14 }, // E
                     { wch: 10 }, // F
                     { wch: 14 }, // G
                     { wch: 8 },  // H
-                    { wch: 18 }, // I
-                    { wch: 5 },  // J
+                    { wch: 12 }, // I
                 ];
 
                 // 行高さ設定
@@ -639,7 +638,6 @@
                     // 行4: 対象期間
                     { s: { r: 4, c: 1 }, e: { r: 4, c: 2 } }, // 開始日
                     { s: { r: 4, c: 4 }, e: { r: 4, c: 5 } }, // 終了日
-                    { s: { r: 4, c: 7 }, e: { r: 4, c: 8 } }, // 注記
                     // 行5: モニタリング内容ヘッダー
                     { s: { r: 5, c: 0 }, e: { r: 5, c: 8 } },
                     // 行6-8: 体調について
@@ -655,7 +653,7 @@
                     { s: { r: 15, c: 1 }, e: { r: 15, c: 3 } }, // 記録者の値
                     { s: { r: 15, c: 5 }, e: { r: 15, c: 8 } }, // 確認者の値
                     // 行16: フッター
-                    { s: { r: 16, c: 7 }, e: { r: 16, c: 8 } },
+                    { s: { r: 16, c: 6 }, e: { r: 16, c: 8 } },
                 ];
 
                 // スタイル適用ヘルパー
@@ -693,7 +691,7 @@
                 setCell('A3', { font: headerFont, alignment: centerAlign, border: allBorders, fill: methodRowFill });
                 // 方法チェックの背景
                 for (let r = 2; r <= 3; r++) {
-                    for (let c = 2; c <= 9; c++) {
+                    for (let c = 2; c <= 8; c++) {
                         const addr = XLSX.utils.encode_cell({ r, c });
                         setCell(addr, { font: bodyFont, alignment: centerAlign, border: allBorders });
                     }

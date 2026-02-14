@@ -219,8 +219,8 @@
             const [records, setRecords] = useState([]);
             const [supabaseStatus, setSupabaseStatus] = useState('connecting');
 
-            // あいうえお順にソートした利用者リスト
-            const sortedUsers = useMemo(() => [...users].sort((a, b) => a.name.localeCompare(b.name, 'ja')), [users]);
+            // ふりがなのあいうえお順にソートした利用者リスト
+            const sortedUsers = useMemo(() => [...users].sort((a, b) => (a.furigana || a.name).localeCompare(b.furigana || b.name, 'ja')), [users]);
 
             // APIキーの初期化：手動入力があればそれを優先、なければローカルストレージ
             const [apiKey, setApiKey] = useState(() => {
@@ -279,7 +279,7 @@
                 try {
                     const { data: usersData, error: usersError } = await supabase.from('users').select('*');
                     if (usersError) throw usersError;
-                    const mappedUsers = (usersData || []).map(u => ({ id: u.id, name: u.name, number: u.number || '' }));
+                    const mappedUsers = (usersData || []).map(u => ({ id: u.id, name: u.name, furigana: u.furigana || '', number: u.number || '' }));
                     setUsers(mappedUsers);
                     localStorage.setItem('sw_users', JSON.stringify(mappedUsers));
 
@@ -317,7 +317,7 @@
 
             const saveUserToSupabase = async (user) => {
                 try {
-                    const { error } = await supabase.from('users').upsert({ id: user.id, name: user.name, number: user.number || '' });
+                    const { error } = await supabase.from('users').upsert({ id: user.id, name: user.name, furigana: user.furigana || '', number: user.number || '' });
                     if (error) throw error;
                 } catch (e) { console.error('ユーザー保存エラー:', e); }
             };
@@ -1127,10 +1127,10 @@
                                     <h3 className="font-bold text-gray-700 mb-4 border-b pb-2">登録済み利用者 ({users.length}名)</h3>
                                     {users.length === 0 ? <p className="text-gray-400">利用者が登録されていません</p> : (
                                         <div className="grid gap-3">
-                                            {users.map(u => (
+                                            {sortedUsers.map(u => (
                                                 <div key={u.id} className="flex justify-between items-center p-3 bg-white rounded border hover:shadow-sm transition">
                                                     <div>
-                                                        <div className="font-bold text-lg">{u.name}</div>
+                                                        <div className="font-bold text-lg">{u.name} {u.furigana && <span className="text-sm text-gray-400 ml-2">({u.furigana})</span>}</div>
                                                         <div className="text-sm text-gray-500">{u.number}</div>
                                                     </div>
                                                     <button onClick={() => { if (confirm('削除しますか？')) { deleteUserFromSupabase(u.id); setUsers(users.filter(user => user.id !== u.id)); } }} className="btn btn-ghost text-red-500">
@@ -1424,23 +1424,30 @@
         // サブコンポーネント: 利用者追加フォーム
         const AddUserForm = ({ onAdd }) => {
             const [name, setName] = useState('');
+            const [furigana, setFurigana] = useState('');
             const [number, setNumber] = useState('');
 
             const handleSubmit = (e) => {
                 e.preventDefault();
                 if (!name) return;
-                onAdd({ name, number });
+                if (!furigana) { alert('ふりがなを入力してください'); return; }
+                onAdd({ name, furigana, number });
                 setName('');
+                setFurigana('');
                 setNumber('');
             };
 
             return (
-                <form onSubmit={handleSubmit} className="flex gap-4 items-end">
-                    <div className="flex-1">
+                <form onSubmit={handleSubmit} className="flex gap-4 items-end flex-wrap">
+                    <div className="flex-1 min-w-[140px]">
                         <label className="block text-sm font-bold text-gray-600 mb-1">氏名</label>
                         <input className="input-field" value={name} onChange={e => setName(e.target.value)} placeholder="例：山田 太郎" />
                     </div>
-                    <div className="flex-1">
+                    <div className="flex-1 min-w-[140px]">
+                        <label className="block text-sm font-bold text-gray-600 mb-1">ふりがな</label>
+                        <input className="input-field" value={furigana} onChange={e => setFurigana(e.target.value)} placeholder="例：やまだ たろう" />
+                    </div>
+                    <div className="flex-1 min-w-[140px]">
                         <label className="block text-sm font-bold text-gray-600 mb-1">受給者証番号</label>
                         <input className="input-field" value={number} onChange={e => setNumber(e.target.value)} placeholder="例：0000123456" />
                     </div>

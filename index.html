@@ -13,8 +13,8 @@
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <!-- Excel出力用ライブラリ (SheetJS) -->
-    <script lang="javascript" src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    <!-- Excel出力用ライブラリ (xlsx-js-style: スタイル対応版) -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
     <!-- Supabase -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
@@ -534,18 +534,253 @@
                 }));
             };
 
-            // --- Excel出力 ---
+            // --- Excel出力（帳票様式） ---
+            const thinBorder = { style: 'thin', color: { rgb: '000000' } };
+            const allBorders = { top: thinBorder, bottom: thinBorder, left: thinBorder, right: thinBorder };
+            const headerFont = { bold: true, sz: 10, name: 'ＭＳ Ｐゴシック' };
+            const bodyFont = { sz: 10, name: 'ＭＳ Ｐゴシック' };
+            const titleFont = { bold: true, sz: 18, name: 'ＭＳ Ｐゴシック' };
+            const noteFont = { sz: 8, name: 'ＭＳ Ｐゴシック' };
+            const centerAlign = { horizontal: 'center', vertical: 'center', wrapText: true };
+            const leftAlign = { horizontal: 'left', vertical: 'center', wrapText: true };
+            const topLeftAlign = { horizontal: 'left', vertical: 'top', wrapText: true };
+            const monitoringFill = { fgColor: { rgb: 'C5D9F1' } };
+            const methodRowFill = { fgColor: { rgb: 'F2F2F2' } };
+
+            // 帳票1件分のシートを作成する
+            const createFormSheet = (rec) => {
+                const user = users.find(u => u.id === rec.userId);
+                const userName = user ? user.name : '不明';
+                const methodMap = { commute: '通所', visit: '訪問', phone: '電話', line: 'LINE', discord: 'Discord', googleForm: 'Googleフォーム' };
+                const selectedMethodLabel = rec.selectedMethod ? (methodMap[rec.selectedMethod] || rec.selectedMethod) : '';
+
+                // 各方法のチェック状態を判定
+                const isMethod = (key) => rec.selectedMethod === key ? '✔' : '';
+
+                // シートデータ（配列の配列）
+                const data = [
+                    // 行0: タイトル行
+                    ['評価 ※1', '', '', '', '※1 評価は作業・訓練対象日(期間最終日)の1週間以内に実施すること', '', '', '', ''],
+                    // 行1: 実施日
+                    ['実施日', getFormattedDate(rec.implementationDate), '', '', '前回実施日', getFormattedDate(rec.previousDate), '', '', ''],
+                    // 行2: 方法（上段）
+                    ['方法', '', 'LINE', isMethod('line'), 'Discord', isMethod('discord'), 'Googleフォーム', isMethod('googleForm'), '電話', isMethod('phone')],
+                    // 行3: 方法（下段）
+                    ['', '', '訪問', isMethod('visit'), '通所', isMethod('commute'), '', '', '', ''],
+                    // 行4: 対象期間
+                    ['対象期間', getFormattedDate(rec.periodStart), '', '～', getFormattedDate(rec.periodEnd), '', '', '', '(評価は一週間ごとに実施)'],
+                    // 行5: モニタリング内容（ヘッダー）
+                    ['', '', '', '', 'モニタリング内容', '', '', '', ''],
+                    // 行6-8: 体調について（3行分）
+                    ['体調について', '', rec.condition || '', '', '', '', '', '', ''],
+                    ['', '', '', '', '', '', '', '', ''],
+                    ['', '', '', '', '', '', '', '', ''],
+                    // 行9-11: 在宅での作業内容について（3行分）
+                    ['在宅での作業内容に', '', rec.workContent || '', '', '', '', '', '', ''],
+                    ['ついて', '', '', '', '', '', '', '', ''],
+                    ['', '', '', '', '', '', '', '', ''],
+                    // 行12-14: 今後の目標（3行分）
+                    ['今後の目標', '', rec.goals || '', '', '', '', '', '', ''],
+                    ['', '', '', '', '', '', '', '', ''],
+                    ['', '', '', '', '', '', '', '', ''],
+                    // 行15: 記録者・確認者
+                    ['記録者', rec.recorder || '', '', '', '確認者(サービス管理責任者)', rec.manager || '', '', '', ''],
+                    // 行16: フッターメモ
+                    ['', '', '', '', '', '', '', '評価内容はサービス管理責任者が必ず確認すること', ''],
+                ];
+
+                const ws = XLSX.utils.aoa_to_sheet(data);
+
+                // 列幅設定
+                ws['!cols'] = [
+                    { wch: 14 }, // A: ラベル
+                    { wch: 8 },  // B
+                    { wch: 10 }, // C
+                    { wch: 5 },  // D
+                    { wch: 14 }, // E
+                    { wch: 10 }, // F
+                    { wch: 14 }, // G
+                    { wch: 8 },  // H
+                    { wch: 18 }, // I
+                    { wch: 5 },  // J
+                ];
+
+                // 行高さ設定
+                ws['!rows'] = [
+                    { hpt: 30 },  // 行0: タイトル
+                    { hpt: 22 },  // 行1: 実施日
+                    { hpt: 20 },  // 行2: 方法上段
+                    { hpt: 20 },  // 行3: 方法下段
+                    { hpt: 22 },  // 行4: 対象期間
+                    { hpt: 25 },  // 行5: モニタリング内容
+                    { hpt: 30 },  // 行6: 体調
+                    { hpt: 30 },  // 行7
+                    { hpt: 30 },  // 行8
+                    { hpt: 30 },  // 行9: 作業内容
+                    { hpt: 30 },  // 行10
+                    { hpt: 30 },  // 行11
+                    { hpt: 30 },  // 行12: 今後の目標
+                    { hpt: 30 },  // 行13
+                    { hpt: 30 },  // 行14
+                    { hpt: 25 },  // 行15: 記録者
+                    { hpt: 18 },  // 行16: フッター
+                ];
+
+                // セル結合の定義
+                ws['!merges'] = [
+                    // 行0: タイトル
+                    { s: { r: 0, c: 0 }, e: { r: 0, c: 1 } }, // 「評価 ※1」
+                    { s: { r: 0, c: 4 }, e: { r: 0, c: 8 } }, // 注記
+                    // 行1: 実施日
+                    { s: { r: 1, c: 1 }, e: { r: 1, c: 3 } }, // 実施日の値
+                    { s: { r: 1, c: 5 }, e: { r: 1, c: 8 } }, // 前回実施日の値
+                    // 行2-3: 方法
+                    { s: { r: 2, c: 0 }, e: { r: 3, c: 1 } }, // 「方法」ラベル
+                    // 行4: 対象期間
+                    { s: { r: 4, c: 1 }, e: { r: 4, c: 2 } }, // 開始日
+                    { s: { r: 4, c: 4 }, e: { r: 4, c: 5 } }, // 終了日
+                    { s: { r: 4, c: 7 }, e: { r: 4, c: 8 } }, // 注記
+                    // 行5: モニタリング内容ヘッダー
+                    { s: { r: 5, c: 0 }, e: { r: 5, c: 8 } },
+                    // 行6-8: 体調について
+                    { s: { r: 6, c: 0 }, e: { r: 8, c: 1 } }, // ラベル
+                    { s: { r: 6, c: 2 }, e: { r: 8, c: 8 } }, // 内容
+                    // 行9-11: 作業内容
+                    { s: { r: 9, c: 0 }, e: { r: 11, c: 1 } }, // ラベル
+                    { s: { r: 9, c: 2 }, e: { r: 11, c: 8 } }, // 内容
+                    // 行12-14: 今後の目標
+                    { s: { r: 12, c: 0 }, e: { r: 14, c: 1 } }, // ラベル
+                    { s: { r: 12, c: 2 }, e: { r: 14, c: 8 } }, // 内容
+                    // 行15: 記録者・確認者
+                    { s: { r: 15, c: 1 }, e: { r: 15, c: 3 } }, // 記録者の値
+                    { s: { r: 15, c: 5 }, e: { r: 15, c: 8 } }, // 確認者の値
+                    // 行16: フッター
+                    { s: { r: 16, c: 7 }, e: { r: 16, c: 8 } },
+                ];
+
+                // スタイル適用ヘルパー
+                const setCell = (addr, style) => {
+                    if (!ws[addr]) ws[addr] = { v: '', t: 's' };
+                    ws[addr].s = { ...ws[addr].s, ...style };
+                };
+
+                // 全セルにデフォルトフォントと罫線を適用
+                const range = XLSX.utils.decode_range(ws['!ref']);
+                for (let r = range.s.r; r <= range.e.r; r++) {
+                    for (let c = range.s.c; c <= range.e.c; c++) {
+                        const addr = XLSX.utils.encode_cell({ r, c });
+                        if (!ws[addr]) ws[addr] = { v: '', t: 's' };
+                        ws[addr].s = {
+                            font: bodyFont,
+                            border: allBorders,
+                            alignment: centerAlign
+                        };
+                    }
+                }
+
+                // 行0: タイトル
+                setCell('A1', { font: titleFont, alignment: { horizontal: 'left', vertical: 'center' }, border: { bottom: thinBorder } });
+                setCell('B1', { font: titleFont, border: { bottom: thinBorder } });
+                for (let c = 2; c <= 3; c++) setCell(XLSX.utils.encode_cell({ r: 0, c }), { border: {}, font: noteFont });
+                setCell('E1', { font: noteFont, alignment: { horizontal: 'left', vertical: 'center', wrapText: true }, border: {} });
+                for (let c = 5; c <= 8; c++) setCell(XLSX.utils.encode_cell({ r: 0, c }), { font: noteFont, border: {} });
+
+                // 行1: 実施日
+                setCell('A2', { font: headerFont, alignment: centerAlign, border: allBorders, fill: methodRowFill });
+                setCell('E2', { font: headerFont, alignment: centerAlign, border: allBorders, fill: methodRowFill });
+
+                // 行2-3: 方法
+                setCell('A3', { font: headerFont, alignment: centerAlign, border: allBorders, fill: methodRowFill });
+                // 方法チェックの背景
+                for (let r = 2; r <= 3; r++) {
+                    for (let c = 2; c <= 9; c++) {
+                        const addr = XLSX.utils.encode_cell({ r, c });
+                        setCell(addr, { font: bodyFont, alignment: centerAlign, border: allBorders });
+                    }
+                }
+
+                // 行4: 対象期間
+                setCell('A5', { font: headerFont, alignment: centerAlign, border: allBorders, fill: methodRowFill });
+                setCell('I5', { font: noteFont, alignment: { horizontal: 'right', vertical: 'center', wrapText: true }, border: allBorders });
+
+                // 行5: モニタリング内容（青色背景）
+                setCell('A6', { font: { bold: true, sz: 12, name: 'ＭＳ Ｐゴシック', color: { rgb: 'FFFFFF' } }, alignment: centerAlign, fill: { fgColor: { rgb: '4472C4' } }, border: allBorders });
+                for (let c = 1; c <= 8; c++) {
+                    const addr = XLSX.utils.encode_cell({ r: 5, c });
+                    setCell(addr, { font: { bold: true, sz: 12, name: 'ＭＳ Ｐゴシック', color: { rgb: 'FFFFFF' } }, fill: { fgColor: { rgb: '4472C4' } }, border: allBorders });
+                }
+
+                // 行6-8: 体調
+                setCell('A7', { font: headerFont, alignment: { horizontal: 'left', vertical: 'center', wrapText: true }, border: allBorders });
+                setCell('C7', { font: bodyFont, alignment: topLeftAlign, border: allBorders });
+
+                // 行9-11: 作業内容
+                setCell('A10', { font: headerFont, alignment: { horizontal: 'left', vertical: 'center', wrapText: true }, border: allBorders });
+                setCell('C10', { font: bodyFont, alignment: topLeftAlign, border: allBorders });
+
+                // 行12-14: 目標
+                setCell('A13', { font: headerFont, alignment: { horizontal: 'left', vertical: 'center', wrapText: true }, border: allBorders });
+                setCell('C13', { font: bodyFont, alignment: topLeftAlign, border: allBorders });
+
+                // 行15: 記録者・確認者
+                setCell('A16', { font: headerFont, alignment: centerAlign, border: allBorders, fill: methodRowFill });
+                setCell('E16', { font: headerFont, alignment: centerAlign, border: allBorders, fill: methodRowFill });
+
+                // 行16: フッター
+                for (let c = 0; c <= 8; c++) {
+                    const addr = XLSX.utils.encode_cell({ r: 16, c });
+                    setCell(addr, { border: {}, font: noteFont });
+                }
+                setCell('H17', { font: noteFont, alignment: { horizontal: 'right', vertical: 'center' }, border: {} });
+
+                return ws;
+            };
+
+            // 帳票様式で1件出力
+            const exportFormattedExcel = (rec) => {
+                const user = users.find(u => u.id === rec.userId);
+                const ws = createFormSheet(rec);
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, '週評価');
+                const fileName = `${user ? user.name : '不明'}_${rec.implementationDate}_週評価帳票.xlsx`;
+                XLSX.writeFile(wb, fileName);
+            };
+
+            // 1ヶ月分帳票出力
+            const exportMonthlyFormattedExcel = (userId, year, month) => {
+                const user = users.find(u => u.id === userId);
+                if (!user) { alert('利用者を選択してください'); return; }
+
+                const monthRecords = records.filter(r => {
+                    if (r.userId !== userId) return false;
+                    const d = new Date(r.implementationDate);
+                    return d.getFullYear() === year && (d.getMonth() + 1) === month;
+                }).sort((a, b) => new Date(a.implementationDate) - new Date(b.implementationDate));
+
+                if (monthRecords.length === 0) {
+                    alert(`${year}年${month}月の週評価データが見つかりません。`);
+                    return;
+                }
+
+                const wb = XLSX.utils.book_new();
+                monthRecords.forEach((rec, idx) => {
+                    const ws = createFormSheet(rec);
+                    const sheetName = `第${idx + 1}週_${rec.implementationDate}`;
+                    XLSX.utils.book_append_sheet(wb, ws, sheetName.substring(0, 31));
+                });
+
+                XLSX.writeFile(wb, `${user.name}_${year}年${month}月_週評価帳票.xlsx`);
+            };
+
+            // 旧Excel出力（シンプル表形式を残す）
             const exportExcel = (targetRecords, fileName) => {
                 if (targetRecords.length === 0) { alert('出力するデータがありません'); return; }
-
                 const rows = targetRecords.map(rec => {
                     const user = users.find(u => u.id === rec.userId);
                     const methodMap = { commute: '通所', visit: '訪問', phone: '電話', line: 'LINE', discord: 'Discord', googleForm: 'Googleフォーム' };
-                    const methods = rec.selectedMethod ? (methodMap[rec.selectedMethod] || rec.selectedMethod) : (rec.methods ? Object.keys(rec.methods).filter(k => rec.methods[k]).map(k => methodMap[k] || k).join('・') : '');
-
+                    const methods = rec.selectedMethod ? (methodMap[rec.selectedMethod] || rec.selectedMethod) : '';
                     return {
                         "氏名": user ? user.name : '不明',
-                        "受給者証番号": user ? user.number : '',
                         "実施日": getFormattedDate(rec.implementationDate),
                         "前回実施日": getFormattedDate(rec.previousDate),
                         "対象期間開始": getFormattedDate(rec.periodStart),
@@ -558,17 +793,11 @@
                         "確認者": rec.manager
                     };
                 });
-
-                const worksheet = XLSX.utils.json_to_sheet(rows);
-                const wscols = [
-                    { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 },
-                    { wch: 20 }, { wch: 40 }, { wch: 40 }, { wch: 40 }, { wch: 10 }, { wch: 10 }
-                ];
-                worksheet['!cols'] = wscols;
-
-                const workbook = XLSX.utils.book_new();
-                XLSX.utils.book_append_sheet(workbook, worksheet, "週評価記録");
-                XLSX.writeFile(workbook, `${fileName}.xlsx`);
+                const ws = XLSX.utils.json_to_sheet(rows);
+                ws['!cols'] = [{ wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 20 }, { wch: 40 }, { wch: 40 }, { wch: 40 }, { wch: 10 }, { wch: 10 }];
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, '週評価記録');
+                XLSX.writeFile(wb, `${fileName}.xlsx`);
             };
 
             // --- 月1達成度評価: 週評価データから自動抽出 ---
@@ -725,7 +954,7 @@
                             </button>
                         </nav>
                         <div className="p-4 text-xs text-gray-400 text-center">
-                            v3.0.0 Supabase
+                            v3.1.0 帳票対応版
                         </div>
                     </div>
 
@@ -922,15 +1151,14 @@
                             <div className="max-w-5xl mx-auto space-y-6">
                                 <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
                                     <span className="bg-yellow-500 w-2 h-8 rounded-full inline-block"></span>
-                                    記録一覧・Excel出力
+                                    記録一覧・帳票出力
                                 </h2>
 
-                                <div className="glass p-6 rounded-xl flex gap-4 items-center flex-wrap">
-                                    <h3 className="font-bold">一括操作:</h3>
-                                    <button onClick={() => exportExcel(records, '全利用者_在宅週評価')} className="btn btn-secondary">
-                                        <Icons.Download /> 全員の記録をExcel出力
-                                    </button>
-                                </div>
+                                {/* 1ヶ月分帳票出力 */}
+                                <MonthlyExportPanel
+                                    sortedUsers={sortedUsers}
+                                    onExport={(userId, year, month) => exportMonthlyFormattedExcel(userId, year, month)}
+                                />
 
                                 <div className="glass p-6 rounded-xl">
                                     <table className="w-full text-left border-collapse">
@@ -956,10 +1184,10 @@
                                                         <td className="p-3 text-sm">{rec.recorder}</td>
                                                         <td className="p-3 text-right flex justify-end gap-2">
                                                             <button
-                                                                onClick={() => exportExcel([rec], `${user?.name}_${rec.implementationDate}_週評価`)}
-                                                                className="text-blue-600 hover:underline text-sm font-bold"
+                                                                onClick={() => exportFormattedExcel(rec)}
+                                                                className="text-green-600 hover:underline text-sm font-bold"
                                                             >
-                                                                Excel出力
+                                                                📋 帳票出力
                                                             </button>
                                                             <button
                                                                 onClick={() => { if (confirm('削除しますか？')) { deleteRecordFromSupabase(rec.id); setRecords(records.filter(r => r.id !== rec.id)); } }}
@@ -1220,6 +1448,51 @@
                     </div>
                     <button type="submit" className="btn btn-primary h-11 px-6">追加</button>
                 </form>
+            );
+        };
+
+        // サブコンポーネント: 1ヶ月分帳票出力パネル
+        const MonthlyExportPanel = ({ sortedUsers, onExport }) => {
+            const now = new Date();
+            const [expUserId, setExpUserId] = useState('');
+            const [expYear, setExpYear] = useState(now.getFullYear());
+            const [expMonth, setExpMonth] = useState(now.getMonth() + 1);
+
+            return (
+                <div className="glass p-6 rounded-xl border-l-4 border-green-500">
+                    <h3 className="font-bold text-green-700 mb-4 flex items-center gap-2">
+                        📋 1ヶ月分の帳票様式Excel出力
+                    </h3>
+                    <div className="flex gap-4 items-end flex-wrap">
+                        <div className="flex-1 min-w-[160px]">
+                            <label className="block text-sm font-bold text-gray-600 mb-1">利用者</label>
+                            <select className="input-field" value={expUserId} onChange={e => setExpUserId(e.target.value)}>
+                                <option value="">選択してください</option>
+                                {sortedUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-bold text-gray-600 mb-1">年</label>
+                            <select className="input-field" value={expYear} onChange={e => setExpYear(Number(e.target.value))}>
+                                {[2024, 2025, 2026, 2027, 2028].map(y => <option key={y} value={y}>{y}年</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-bold text-gray-600 mb-1">月</label>
+                            <select className="input-field" value={expMonth} onChange={e => setExpMonth(Number(e.target.value))}>
+                                {[...Array(12)].map((_, i) => <option key={i + 1} value={i + 1}>{i + 1}月</option>)}
+                            </select>
+                        </div>
+                        <button
+                            onClick={() => { if (!expUserId) { alert('利用者を選択してください'); return; } onExport(expUserId, expYear, expMonth); }}
+                            className="btn btn-primary h-11 px-6 shadow-lg transform hover:-translate-y-1"
+                        >
+                            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+                            帳票様式で出力
+                        </button>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-3">※ 選択した利用者・月に該当する週評価を帳票様式（画像と同じフォーマット）でExcel出力します。各週が別シートになります。</p>
+                </div>
             );
         };
 

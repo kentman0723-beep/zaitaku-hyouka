@@ -784,6 +784,20 @@
                 if (!formData.userId) { alert('利用者を選択してください'); return; }
                 if (!formData.recorder) { alert('記録者を入力してください'); return; }
 
+                // 重複チェック: 同じ利用者・同じ対象期間の記録が既に存在するか確認
+                const isDuplicate = records.some(r =>
+                    r.userId === formData.userId &&
+                    r.periodStart === formData.periodStart &&
+                    r.periodEnd === formData.periodEnd
+                );
+
+                if (isDuplicate) {
+                    const user = users.find(u => u.id === formData.userId);
+                    const userName = user ? user.name : 'この利用者';
+                    alert(`${userName}さんのこの期間（${formData.periodStart} ～ ${formData.periodEnd}）の週評価は既に存在します。\n重複して作成することはできません。`);
+                    return;
+                }
+
                 const newRecord = { ...formData, id: generateId() };
                 setRecords([newRecord, ...records]);
                 await saveRecordToSupabase(newRecord);

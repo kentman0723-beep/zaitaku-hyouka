@@ -646,6 +646,85 @@
                 }
             }, [formData.userId]);
 
+            // --- Gemini AI 生成 (共通関数) ---
+            // 動的モデル探索機能付き
+            const generateGeminiContent = async (systemPrompt, userText, apiKey, onStatusUpdate) => {
+                const genAI = new window.GoogleGenerativeAI(apiKey);
+
+                // 1. 優先モデルリスト (高速・高性能な順)
+                let modelsToTry = [
+                    'gemini-2.5-flash',
+                    'gemini-2.0-flash',
+                    'gemini-2.0-flash-lite',
+                    'gemini-1.5-flash',
+                    'gemini-1.5-flash-latest',
+                    'gemini-flash-latest'
+                ];
+
+                let lastError = null;
+
+                // ヘルパー: モデルリストで試行
+                const tryModels = async (list) => {
+                    for (const modelName of list) {
+                        try {
+                            if (onStatusUpdate) onStatusUpdate(`モデル試行中: ${modelName}...`);
+                            console.log(`Trying model: ${modelName}`);
+                            const model = genAI.getGenerativeModel({ model: modelName });
+                            const result = await model.generateContent(systemPrompt + `\n\n【キーワード】\n${userText}`);
+                            const response = await result.response;
+                            return response.text();
+                        } catch (e) {
+                            console.warn(`Model ${modelName} failed:`, e);
+                            lastError = e;
+                        }
+                    }
+                    return null;
+                };
+
+                // ステップ1: 優先リストで試行
+                let text = await tryModels(modelsToTry);
+                if (text) return text;
+
+                // ステップ2: 失敗した場合、動的に利用可能なモデルを取得して試行
+                if (onStatusUpdate) onStatusUpdate('利用可能なモデルを検索中...');
+                try {
+                    console.log('Fetching available models from API...');
+                    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+                    const data = await res.json();
+
+                    if (data.models) {
+                        const availableModels = data.models
+                            .filter(m => m.supportedGenerationMethods && m.supportedGenerationMethods.includes('generateContent'))
+                            .map(m => m.name.replace('models/', ''))
+                            .filter(name => !modelsToTry.includes(name))
+                            .filter(name => name.includes('gemini'))
+                            .sort((a, b) => {
+                                const score = (name) => {
+                                    let s = 0;
+                                    if (name.includes('flash')) s += 10;
+                                    if (name.includes('latest')) s += 5;
+                                    if (name.includes('002')) s += 2;
+                                    if (name.includes('2.0')) s += 20;
+                                    if (name.includes('1.5')) s += 15;
+                                    return s;
+                                };
+                                return score(b) - score(a);
+                            });
+
+                        if (availableModels.length > 0) {
+                            console.log('Discovered models:', availableModels);
+                            if (onStatusUpdate) onStatusUpdate(`新モデルで再試行中...`);
+                            text = await tryModels(availableModels);
+                            if (text) return text;
+                        }
+                    }
+                } catch (e) {
+                    console.error('Model discovery failed:', e);
+                }
+
+                throw lastError || new Error('全てのモデルで生成に失敗しました。');
+            };
+
             // --- Gemini AI 生成 (項目ごと) ---
             const generateSingleContent = async (targetField) => {
                 // APIキーチェック
@@ -656,88 +735,45 @@
                     return;
                 }
 
-                // キーワードチェック
                 const currentText = formData[targetField];
-                if (!currentText) {
-                    alert('【重要】\n入力欄にキーワード（例：「元気」「データ入力」など）を入力してからボタンを押してください。\nAIはそのキーワードを元に文章を作成します。');
-                    return;
-                }
+                if (!currentText) { alert('キーワードを入力してからボタンを押してください。'); return; }
 
                 setLoadingState(prev => ({ ...prev, [targetField]: true }));
 
+
+                // プロンプト定義
                 let instruction = "";
                 if (targetField === 'condition') {
-                    instruction = "入力されたキーワードを元に、「1週間の体調について」の週評価報告文章を2〜3文程度で簡潔に作成してください。支援員が利用者に聞き取りを行い、1週間を通しての体調を評価した記録です。「本日」ではなく「今週」「この1週間」という視点で記述してください。福祉支援記録として適切な「です・ます」調の文章にしてください。";
+                    instruction = "入力されたキーワードを元に、「体調について」の週評価報告文章を2〜3文程度で簡潔に作成してください。支援員が聞き取りを行い、利用者の1週間の健康状態や睡眠、服薬状況などを評価した記録です。「本日」ではなく「今週」「この1週間」という視点で記述してください。福祉支援記録として適切な「です・ます」調の文章にしてください。";
                 } else if (targetField === 'workContent') {
                     instruction = "入力されたキーワードを元に、「1週間の在宅での作業内容について」の週評価報告文章を2〜3文程度で簡潔に作成してください。支援員が利用者に聞き取りを行い、1週間を通しての作業状況を評価した記録です。「本日」ではなく「今週」「この1週間」という視点で記述してください。福祉支援記録として適切な「です・ます」調の文章にしてください。";
                 } else if (targetField === 'goals') {
                     instruction = "入力されたキーワードを元に、「今後の目標」の週評価報告文章を2〜3文程度で簡潔に作成してください。支援員が利用者との聞き取りを踏まえ、来週に向けた目標を記録したものです。福祉支援記録として適切な「です・ます」調の文章にしてください。";
                 }
 
-                const prompt = `
+                const systemPrompt = `
                     あなたは障害福祉サービスの就労継続支援B型の支援員です。
                     利用者への聞き取りを元に、週間評価の報告文章を作成してください。
                     これは「週評価」であり、1週間を通しての状況を支援員がまとめた記録です。
                     「本日」「今日」という表現は使わず、「今週」「この1週間」という視点で書いてください。
-                    
-                    【聞き取りキーワード】
-                    ${currentText}
 
                     【指示】
                     ${instruction}
                     出力は作成した文章のみを行ってください（JSONではなく、プレーンテキストで出力）。文章は2〜3文に収めてください。
                 `;
 
-                // 試行するモデルのリスト (診断結果に基づき優先順位変更)
-                const modelsToTry = [
-                    'gemini-2.5-flash',
-                    'gemini-2.0-flash',
-                    'gemini-2.0-flash-lite',
-                    'gemini-flash-latest',
-                    'gemini-pro-latest'
-                ];
-
-                let success = false;
-                let lastError = null;
-
                 try {
-                    // SDKの初期化
-                    if (!window.GoogleGenerativeAI) {
-                        throw new Error("Google Generative AI SDKが読み込まれていません。インターネット接続を確認してください。");
-                    }
+                    const text = await generateGeminiContent(systemPrompt, currentText, currentKey, (status) => {
+                        // ステータス表示があればここで更新できる（現在はloadingのみ）
+                        console.log(status);
+                    });
 
-                    const genAI = new window.GoogleGenerativeAI(currentKey);
-
-                    for (const modelName of modelsToTry) {
-                        try {
-                            console.log(`Trying model (SDK): ${modelName}...`);
-                            const model = genAI.getGenerativeModel({ model: modelName });
-
-                            const result = await model.generateContent(prompt);
-                            const response = await result.response;
-                            const text = response.text();
-
-                            if (text) {
-                                setFormData(prev => ({
-                                    ...prev,
-                                    [targetField]: text.trim()
-                                }));
-                                success = true;
-                                break;
-                            }
-                        } catch (e) {
-                            console.warn(`Model ${modelName} failed:`, e);
-                            lastError = e;
-                        }
-                    }
-
-                    if (!success) {
-                        throw lastError || new Error("全モデルで生成に失敗しました");
+                    if (text) {
+                        setFormData(prev => ({ ...prev, [targetField]: text.trim() }));
                     }
 
                 } catch (e) {
                     console.error("AI Generation Error:", e);
-                    alert(`AI生成エラー: ${e.message}\nしばらく待ってから再試行するか、管理者にお問い合わせください。`);
                 } finally {
                     setLoadingState(prev => ({ ...prev, [targetField]: false }));
                 }
@@ -1228,40 +1264,19 @@
                     あなたは障害福祉サービスの就労継続支援B型の支援員です。
                     在宅における就労達成度評価シートの記入を行っています。
                     
-                    【キーワード】
-                    ${currentText}
-
                     【指示】
                     ${instructions[targetField]}
                     福祉支援記録として適切な「です・ます」調の文章にしてください。
                     出力はプレーンテキストのみ。
                 `;
 
-                const modelsToTry = [
-                    'gemini-2.5-flash',
-                    'gemini-2.0-flash',
-                    'gemini-2.0-flash-lite',
-                    'gemini-flash-latest',
-                    'gemini-pro-latest'
-                ];
-                let success = false, lastError = null;
                 try {
-                    if (!window.GoogleGenerativeAI) throw new Error('AI SDKが読み込まれていません。');
-                    const genAI = new window.GoogleGenerativeAI(currentKey);
-                    for (const modelName of modelsToTry) {
-                        try {
-                            const model = genAI.getGenerativeModel({ model: modelName });
-                            const result = await model.generateContent(prompt);
-                            const text = (await result.response).text();
-                            if (text) {
-                                setMonthlyFormData(prev => ({ ...prev, [targetField]: text.trim() }));
-                                success = true;
-                                break;
-                            }
-                        } catch (e) { lastError = e; }
+                    const text = await generateGeminiContent(prompt, currentText, currentKey, (status) => console.log(status));
+                    if (text) {
+                        setMonthlyFormData(prev => ({ ...prev, [targetField]: text.trim() }));
                     }
-                    if (!success) throw lastError || new Error('全モデルで失敗');
                 } catch (e) {
+                    console.error("AI Generation Error:", e);
                     alert(`AI生成エラー: ${e.message}`);
                 } finally {
                     setMonthlyLoading(prev => ({ ...prev, [targetField]: false }));

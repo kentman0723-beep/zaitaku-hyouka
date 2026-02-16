@@ -179,9 +179,8 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        // ★重要★ APIキーをここに直接入力してください（シングルクォーテーションの間）
-        // 例: const MANUAL_API_KEY = 'AIzaSyDBAaY9GNe9kaGPtOfZqCDZjdu-tlVxVt8';
-        const MANUAL_API_KEY = 'AIzaSyDBAaY9GNe9kaGPtOfZqCDZjdu-tlVxVt8';
+        // APIキーはSupabaseから取得します
+        const MANUAL_API_KEY = '';
 
         // --- Supabase 設定 ---
         const SUPABASE_URL = 'https://rowvbhhwbgllfczvqkzx.supabase.co';
@@ -574,10 +573,32 @@
             useEffect(() => { localStorage.setItem('sw_users', JSON.stringify(users)); }, [users]);
             useEffect(() => { localStorage.setItem('sw_records', JSON.stringify(records)); }, [records]);
 
-            // APIキーの変更監視・保存
+            // APIキーの取得（Supabaseから自動取得）
             useEffect(() => {
-                if (apiKey) localStorage.setItem('sw_api_key', apiKey);
-            }, [apiKey]);
+                const fetchSystemApiKey = async () => {
+                    if (!authUser) return;
+
+                    try {
+                        const { data, error } = await supabase
+                            .from('app_settings')
+                            .select('value')
+                            .eq('key', 'gemini_api_key')
+                            .single();
+
+                        if (error) {
+                            console.warn('APIキーの取得に失敗:', error);
+                        } else if (data) {
+                            console.log('共通APIキーを読み込みました');
+                            setApiKey(data.value);
+                            localStorage.setItem('sw_api_key', data.value);
+                        }
+                    } catch (err) {
+                        console.error('APIキー設定エラー:', err);
+                    }
+                };
+
+                fetchSystemApiKey();
+            }, [authUser]);
 
             // --- 自動計算ロジック ---
             const handleDateChange = (date) => {
@@ -631,8 +652,7 @@
                 const currentKey = apiKey || MANUAL_API_KEY;
 
                 if (!currentKey) {
-                    alert('AI機能を使用するには、APIキーが必要です。\nコード内の `MANUAL_API_KEY` に入力するか、設定画面で入力してください。\n設定画面へ移動します。');
-                    setView('settings');
+                    alert('AI機能を使用するには、システム管理者によるAPIキーの設定が必要です。\n管理者に連絡してください。');
                     return;
                 }
 
@@ -1183,7 +1203,7 @@
             // --- 月1達成度評価: AI生成 ---
             const generateMonthlyContent = async (targetField) => {
                 const currentKey = apiKey || MANUAL_API_KEY;
-                if (!currentKey) { alert('APIキーが必要です。設定画面で入力してください。'); setView('settings'); return; }
+                if (!currentKey) { alert('APIキーが設定されていません。管理者に連絡してください。'); return; }
 
                 const currentText = monthlyFormData[targetField];
                 if (!currentText) { alert('キーワードを入力してからボタンを押してください。'); return; }
@@ -1577,6 +1597,13 @@
                                             <label className="block text-sm font-bold text-gray-500 mb-1">ログイン方法</label>
                                             <div className="input-field bg-gray-100 text-gray-700">
                                                 {authUser?.app_metadata?.provider === 'google' ? '🔗 Googleアカウント' : '📧 メール + パスワード'}
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-bold text-gray-500 mb-1">AI機能 (APIキー)</label>
+                                            <div className="input-field bg-gray-100 text-gray-700 flex items-center gap-2">
+                                                <span className={`w-2 h-2 rounded-full ${apiKey ? 'bg-green-500' : 'bg-red-500'}`}></span>
+                                                {apiKey ? '有効 (システム管理)' : '未設定 (管理者に連絡してください)'}
                                             </div>
                                         </div>
                                     </div>

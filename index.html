@@ -331,6 +331,7 @@
 
             const saveRecordToSupabase = async (record) => {
                 try {
+                    console.log('💾 Saving record to Supabase...', record.id);
                     const { error } = await supabase.from('records').upsert({
                         id: record.id,
                         user_id: record.userId,
@@ -346,7 +347,11 @@
                         manager: record.manager
                     });
                     if (error) throw error;
-                } catch (e) { console.error('記録保存エラー:', e); }
+                    console.log('✅ Record saved successfully:', record.id);
+                } catch (e) {
+                    console.error('記録保存エラー:', e);
+                    alert('記録の保存に失敗しました: ' + (e.message || JSON.stringify(e)));
+                }
             };
 
             const deleteRecordFromSupabase = async (recordId) => {

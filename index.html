@@ -4,9 +4,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>在宅週評価</title>
+    <title>みまもりノート</title>
     <link rel="icon" type="image/svg+xml"
-        href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0%25' stop-color='%236ee7b7'/%3E%3Cstop offset='100%25' stop-color='%2310b981'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='10' fill='url(%23g)'/%3E%3Cpath d='M16 8l-8 7h3v9h10v-9h3z' fill='white' opacity='0.95'/%3E%3Cpath d='M13 18l2 2 4-4' stroke='%2310b981' stroke-width='2.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
+        href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0%25' stop-color='%2386efac'/%3E%3Cstop offset='100%25' stop-color='%2310b981'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='10' fill='url(%23g)'/%3E%3Crect x='8' y='6' width='16' height='20' rx='2.5' fill='white' opacity='0.95'/%3E%3Cline x1='12' y1='13' x2='20' y2='13' stroke='%2386efac' stroke-width='1.5' stroke-linecap='round'/%3E%3Cline x1='12' y1='17' x2='20' y2='17' stroke='%2386efac' stroke-width='1.5' stroke-linecap='round'/%3E%3Cline x1='12' y1='21' x2='17' y2='21' stroke='%2386efac' stroke-width='1.5' stroke-linecap='round'/%3E%3Cpath d='M16 6C14.5 4 11 4.5 11 7c0 2 5 4.5 5 4.5s5-2.5 5-4.5c0-2.5-3.5-3-5 -1z' fill='%23fb7185'/%3E%3C/svg%3E" />
 
     <!-- スタイル・ライブラリ読み込み -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -200,7 +200,9 @@
             Download: () => <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>,
             Trash: () => <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>,
             Settings: () => <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.72l-.15.1a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.72v-.51a2 2 0 0 1 1-1.72l.15-.1a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" /><circle cx="12" cy="12" r="3" /></svg>,
-            Calendar: () => <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /><path d="M8 14l2 2 4-4" /></svg>
+            Calendar: () => <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /><path d="M8 14l2 2 4-4" /></svg>,
+            User: () => <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>,
+            LogOut: () => <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></svg>
         };
 
         // --- ユーティリティ ---
@@ -211,10 +213,212 @@
             return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
         };
 
+        // --- ログインページ コンポーネント ---
+        const LoginPage = ({ onLogin }) => {
+            const [mode, setMode] = useState('login'); // login, signup, reset
+            const [email, setEmail] = useState('');
+            const [password, setPassword] = useState('');
+            const [loading, setLoading] = useState(false);
+            const [message, setMessage] = useState('');
+            const [error, setError] = useState('');
+
+            const handleEmailLogin = async (e) => {
+                e.preventDefault();
+                setLoading(true); setError(''); setMessage('');
+                try {
+                    const { error } = await supabase.auth.signInWithPassword({ email, password });
+                    if (error) throw error;
+                } catch (e) { setError(e.message); }
+                setLoading(false);
+            };
+
+            const handleSignUp = async (e) => {
+                e.preventDefault();
+                setLoading(true); setError(''); setMessage('');
+                try {
+                    const { error } = await supabase.auth.signUp({ email, password });
+                    if (error) throw error;
+                    setMessage('確認メールを送信しました。メールを確認してください。');
+                } catch (e) { setError(e.message); }
+                setLoading(false);
+            };
+
+            const handleGoogleLogin = async () => {
+                setLoading(true); setError('');
+                try {
+                    const { error } = await supabase.auth.signInWithOAuth({
+                        provider: 'google',
+                        options: { redirectTo: window.location.origin + window.location.pathname }
+                    });
+                    if (error) throw error;
+                } catch (e) { setError(e.message); }
+                setLoading(false);
+            };
+
+            const handleResetPassword = async (e) => {
+                e.preventDefault();
+                setLoading(true); setError(''); setMessage('');
+                try {
+                    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+                        redirectTo: window.location.origin + window.location.pathname
+                    });
+                    if (error) throw error;
+                    setMessage('パスワードリセットメールを送信しました。メールを確認してください。');
+                } catch (e) { setError(e.message); }
+                setLoading(false);
+            };
+
+            const LogoIcon = () => (
+                <svg className="w-12 h-12" viewBox="0 0 32 32" fill="none">
+                    <defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#86efac" /><stop offset="100%" stopColor="#10b981" /></linearGradient></defs>
+                    <rect width="32" height="32" rx="10" fill="url(#lg)" />
+                    <rect x="8" y="6" width="16" height="20" rx="2.5" fill="white" opacity="0.95" />
+                    <line x1="12" y1="13" x2="20" y2="13" stroke="#86efac" strokeWidth="1.5" strokeLinecap="round" />
+                    <line x1="12" y1="17" x2="20" y2="17" stroke="#86efac" strokeWidth="1.5" strokeLinecap="round" />
+                    <line x1="12" y1="21" x2="17" y2="21" stroke="#86efac" strokeWidth="1.5" strokeLinecap="round" />
+                    <path d="M16 6C14.5 4 11 4.5 11 7c0 2 5 4.5 5 4.5s5-2.5 5-4.5c0-2.5-3.5-3-5-1z" fill="#fb7185" />
+                </svg>
+            );
+
+            return (
+                <div className="min-h-screen bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50 flex items-center justify-center p-4">
+                    <div className="w-full max-w-md">
+                        <div className="text-center mb-8">
+                            <div className="flex justify-center mb-4"><LogoIcon /></div>
+                            <h1 className="text-3xl font-bold bg-gradient-to-r from-emerald-600 to-green-500 bg-clip-text text-transparent">みまもりノート</h1>
+                            <p className="text-gray-500 mt-2 text-sm">在宅就労支援の記録を、もっとかんたんに。</p>
+                        </div>
+
+                        <div className="glass p-8 rounded-2xl">
+                            {error && <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm mb-4">{error}</div>}
+                            {message && <div className="bg-green-50 text-green-600 p-3 rounded-lg text-sm mb-4">{message}</div>}
+
+                            {mode === 'reset' ? (
+                                <form onSubmit={handleResetPassword}>
+                                    <h2 className="text-xl font-bold text-gray-800 mb-4">パスワードをリセット</h2>
+                                    <p className="text-sm text-gray-500 mb-4">メールアドレスを入力してください。リセットリンクをお送りします。</p>
+                                    <div className="mb-4">
+                                        <label className="block text-sm font-bold text-gray-600 mb-1">メールアドレス</label>
+                                        <input type="email" className="input-field" value={email} onChange={e => setEmail(e.target.value)} placeholder="example@email.com" required />
+                                    </div>
+                                    <button type="submit" disabled={loading} className="btn btn-primary w-full h-12 text-base">
+                                        {loading ? '送信中...' : 'リセットメールを送信'}
+                                    </button>
+                                    <button type="button" onClick={() => { setMode('login'); setError(''); setMessage(''); }} className="w-full text-center text-sm text-emerald-600 hover:underline mt-4">
+                                        ログインに戻る
+                                    </button>
+                                </form>
+                            ) : (
+                                <>
+                                    <h2 className="text-xl font-bold text-gray-800 mb-6">{mode === 'login' ? 'ログイン' : 'アカウント作成'}</h2>
+
+                                    {/* Google ログイン */}
+                                    <button onClick={handleGoogleLogin} disabled={loading}
+                                        className="w-full flex items-center justify-center gap-3 h-12 border-2 border-gray-200 rounded-xl font-medium text-gray-700 hover:bg-gray-50 transition mb-4">
+                                        <svg className="w-5 h-5" viewBox="0 0 24 24">
+                                            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4" />
+                                            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+                                            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
+                                            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+                                        </svg>
+                                        Googleで{mode === 'login' ? 'ログイン' : 'アカウント作成'}
+                                    </button>
+
+                                    <div className="flex items-center gap-3 my-5">
+                                        <div className="flex-1 h-px bg-gray-200"></div>
+                                        <span className="text-xs text-gray-400">or</span>
+                                        <div className="flex-1 h-px bg-gray-200"></div>
+                                    </div>
+
+                                    {/* メール + パスワード */}
+                                    <form onSubmit={mode === 'login' ? handleEmailLogin : handleSignUp}>
+                                        <div className="mb-4">
+                                            <label className="block text-sm font-bold text-gray-600 mb-1">メールアドレス</label>
+                                            <input type="email" className="input-field" value={email} onChange={e => setEmail(e.target.value)} placeholder="example@email.com" required />
+                                        </div>
+                                        <div className="mb-2">
+                                            <label className="block text-sm font-bold text-gray-600 mb-1">パスワード</label>
+                                            <input type="password" className="input-field" value={password} onChange={e => setPassword(e.target.value)} placeholder="6文字以上" required minLength={6} />
+                                        </div>
+
+                                        {mode === 'login' && (
+                                            <div className="text-right mb-4">
+                                                <button type="button" onClick={() => { setMode('reset'); setError(''); setMessage(''); }} className="text-sm text-emerald-600 hover:underline">
+                                                    パスワードをお忘れですか？
+                                                </button>
+                                            </div>
+                                        )}
+
+                                        <button type="submit" disabled={loading} className="btn btn-primary w-full h-12 text-base mt-2">
+                                            {loading ? '処理中...' : (mode === 'login' ? 'ログイン' : 'アカウントを作成')}
+                                        </button>
+                                    </form>
+
+                                    <p className="text-center text-sm text-gray-500 mt-5">
+                                        {mode === 'login' ? 'アカウントをお持ちでない場合 ' : 'すでにアカウントをお持ちの場合 '}
+                                        <button type="button" onClick={() => { setMode(mode === 'login' ? 'signup' : 'login'); setError(''); setMessage(''); }}
+                                            className="text-emerald-600 font-bold hover:underline">
+                                            {mode === 'login' ? '新規登録' : 'ログイン'}
+                                        </button>
+                                    </p>
+                                </>
+                            )}
+                        </div>
+                        <p className="text-center text-xs text-gray-400 mt-6">© 2026 みまもりノート</p>
+                    </div>
+                </div>
+            );
+        };
+
         // --- メインコンポーネント ---
         const App = () => {
+            // 認証状態
+            const [authUser, setAuthUser] = useState(null);
+            const [authLoading, setAuthLoading] = useState(true);
+
+            useEffect(() => {
+                // 現在のセッションを取得
+                supabase.auth.getSession().then(({ data: { session } }) => {
+                    setAuthUser(session?.user ?? null);
+                    setAuthLoading(false);
+                });
+                // 認証状態の変化を監視
+                const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+                    setAuthUser(session?.user ?? null);
+                });
+                return () => subscription.unsubscribe();
+            }, []);
+
+            const handleLogout = async () => {
+                await supabase.auth.signOut();
+                setAuthUser(null);
+            };
+
+            // 認証ローディング中
+            if (authLoading) {
+                return (
+                    <div className="min-h-screen bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50 flex items-center justify-center">
+                        <div className="text-center">
+                            <div className="w-12 h-12 border-4 border-emerald-200 border-t-emerald-500 rounded-full animate-spin mx-auto mb-4"></div>
+                            <p className="text-gray-500">読み込み中...</p>
+                        </div>
+                    </div>
+                );
+            }
+
+            // 未ログイン → ログインページ
+            if (!authUser) {
+                return <LoginPage />;
+            }
+
+            // ログイン済み → メインアプリ
+            return <MainApp authUser={authUser} onLogout={handleLogout} />;
+        };
+
+        // --- メインアプリ (ログイン後) ---
+        const MainApp = ({ authUser, onLogout }) => {
             // State
-            const [view, setView] = useState('input'); // input, monthly, users, history, settings
+            const [view, setView] = useState('input');
             const [users, setUsers] = useState([]);
             const [records, setRecords] = useState([]);
             const [supabaseStatus, setSupabaseStatus] = useState('connecting');
@@ -222,7 +426,7 @@
             // ふりがなのあいうえお順にソートした利用者リスト
             const sortedUsers = useMemo(() => [...users].sort((a, b) => (a.furigana || a.name).localeCompare(b.furigana || b.name, 'ja')), [users]);
 
-            // APIキーの初期化：手動入力があればそれを優先、なければローカルストレージ
+            // APIキーの初期化
             const [apiKey, setApiKey] = useState(() => {
                 if (MANUAL_API_KEY) return MANUAL_API_KEY;
                 return localStorage.getItem('sw_api_key') || '';
@@ -1076,13 +1280,15 @@
                     {/* サイドバー */}
                     <div className="w-64 bg-white border-r flex flex-col shadow-lg z-10">
                         <div className="p-6 border-b flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-400 to-green-600 flex items-center justify-center shadow-lg shadow-green-200">
+                            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-300 to-green-500 flex items-center justify-center shadow-lg shadow-green-200">
                                 <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none">
-                                    <path d="M12 3L3 11h3v8h12v-8h3L12 3z" fill="white" opacity="0.95" />
-                                    <path d="M10 14l2 2 4-4" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.7" />
+                                    <rect x="5" y="4" width="14" height="17" rx="2" fill="white" opacity="0.95" />
+                                    <line x1="9" y1="10" x2="15" y2="10" stroke="#86efac" strokeWidth="1.5" strokeLinecap="round" />
+                                    <line x1="9" y1="14" x2="15" y2="14" stroke="#86efac" strokeWidth="1.5" strokeLinecap="round" />
+                                    <path d="M12 3C11 1.5 8.5 2 8.5 4c0 1.5 3.5 3.5 3.5 3.5S15.5 5.5 15.5 4c0-2-2.5-2.5-3.5-1z" fill="#fb7185" />
                                 </svg>
                             </div>
-                            <h1 className="font-bold text-xl tracking-tight bg-gradient-to-r from-emerald-600 to-green-500 bg-clip-text text-transparent">在宅週評価</h1>
+                            <h1 className="font-bold text-lg tracking-tight bg-gradient-to-r from-emerald-600 to-green-500 bg-clip-text text-transparent">みまもりノート</h1>
                         </div>
                         <nav className="flex-1 p-4 space-y-2">
                             <button onClick={() => setView('input')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition ${view === 'input' ? 'bg-green-50 text-green-700' : 'text-gray-600 hover:bg-gray-50'}`}>
@@ -1097,10 +1303,15 @@
                             <button onClick={() => setView('history')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition ${view === 'history' ? 'bg-green-50 text-green-700' : 'text-gray-600 hover:bg-gray-50'}`}>
                                 <Icons.Table /> 記録一覧・出力
                             </button>
-
+                            <button onClick={() => setView('account')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition ${view === 'account' ? 'bg-green-50 text-green-700' : 'text-gray-600 hover:bg-gray-50'}`}>
+                                <Icons.User /> アカウント設定
+                            </button>
                         </nav>
-                        <div className="p-4 text-xs text-gray-400 text-center">
-                            v3.1.0 帳票対応版
+                        <div className="p-4 border-t">
+                            <div className="text-xs text-gray-400 mb-2 truncate" title={authUser?.email}>👤 {authUser?.email}</div>
+                            <button onClick={onLogout} className="w-full flex items-center gap-2 px-4 py-2 rounded-lg text-sm text-red-500 hover:bg-red-50 transition font-medium">
+                                <Icons.LogOut /> ログアウト
+                            </button>
                         </div>
                     </div>
 
@@ -1349,7 +1560,75 @@
                             </div>
                         )}
 
+                        {/* アカウント設定 */}
+                        {view === 'account' && (
+                            <div className="max-w-2xl mx-auto space-y-6">
+                                <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                                    <span className="bg-emerald-500 w-2 h-8 rounded-full inline-block"></span>
+                                    アカウント設定
+                                </h2>
 
+                                <div className="glass p-6 rounded-xl border-l-4 border-emerald-500">
+                                    <h3 className="font-bold mb-4 text-gray-800 flex items-center gap-2">👤 アカウント情報</h3>
+                                    <div className="space-y-3">
+                                        <div>
+                                            <label className="block text-sm font-bold text-gray-500 mb-1">メールアドレス</label>
+                                            <div className="input-field bg-gray-100 text-gray-700">{authUser?.email || '未設定'}</div>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-bold text-gray-500 mb-1">ログイン方法</label>
+                                            <div className="input-field bg-gray-100 text-gray-700">
+                                                {authUser?.app_metadata?.provider === 'google' ? '🔗 Googleアカウント' : '📧 メール + パスワード'}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className={`glass p-6 rounded-xl border-l-4 ${supabaseStatus === 'connected' ? 'border-green-500' :
+                                    supabaseStatus === 'error' ? 'border-red-500' : 'border-yellow-500'}`}>
+                                    <h3 className="font-bold mb-3">☁️ クラウド接続</h3>
+                                    <div className="flex items-center gap-3">
+                                        <span className={`inline-block w-3 h-3 rounded-full ${supabaseStatus === 'connected' ? 'bg-green-500' :
+                                            supabaseStatus === 'error' ? 'bg-red-500' : 'bg-yellow-500 animate-pulse'}`}></span>
+                                        <span className="font-medium text-sm">
+                                            {supabaseStatus === 'connected' && '接続中 — データはクラウドに自動保存'}
+                                            {supabaseStatus === 'error' && '接続エラー — ローカル保存モード'}
+                                            {supabaseStatus === 'connecting' && '接続中...'}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                {authUser?.app_metadata?.provider !== 'google' && (
+                                    <div className="glass p-6 rounded-xl border-l-4 border-indigo-500">
+                                        <h3 className="font-bold mb-4 text-gray-800">🔑 パスワード変更</h3>
+                                        <form onSubmit={async (e) => {
+                                            e.preventDefault();
+                                            const newPw = e.target.newPassword.value;
+                                            if (newPw.length < 6) { alert('パスワードは6文字以上で入力してください'); return; }
+                                            try {
+                                                const { error } = await supabase.auth.updateUser({ password: newPw });
+                                                if (error) throw error;
+                                                alert('パスワードを変更しました！');
+                                                e.target.reset();
+                                            } catch (err) { alert('エラー: ' + err.message); }
+                                        }}>
+                                            <div className="mb-4">
+                                                <label className="block text-sm font-bold text-gray-600 mb-1">新しいパスワード</label>
+                                                <input type="password" name="newPassword" className="input-field" placeholder="6文字以上" required minLength={6} />
+                                            </div>
+                                            <button type="submit" className="btn btn-secondary h-10 px-6">パスワードを変更</button>
+                                        </form>
+                                    </div>
+                                )}
+
+                                <div className="glass p-6 rounded-xl">
+                                    <button onClick={onLogout} className="btn w-full h-12 text-base border-2 border-red-200 text-red-500 hover:bg-red-50 font-bold">
+                                        ログアウトする
+                                    </button>
+                                    <p className="text-xs text-gray-400 mt-3 text-center">ログアウトしてもデータは保持されます。</p>
+                                </div>
+                            </div>
+                        )}
 
                         {/* 5. 月1達成度評価 */}
                         {view === 'monthly' && (

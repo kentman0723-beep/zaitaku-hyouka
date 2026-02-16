@@ -463,9 +463,9 @@
                 // 試行するモデルのリスト
                 const modelsToTry = [
                     'gemini-2.0-flash',
-                    'gemini-flash-latest',
-                    'gemini-1.5-flash-latest',
-                    'gemini-pro'
+                    'gemini-2.0-flash-lite',
+                    'gemini-1.5-flash',
+                    'gemini-1.5-pro'
                 ];
 
                 let success = false;
@@ -710,19 +710,19 @@
 
                 // 行6-8: 体調
                 setCell('A7', { font: headerFont, alignment: { horizontal: 'left', vertical: 'center', wrapText: true }, border: allBorders });
-                setCell('C7', { font: bodyFont, alignment: topLeftAlign, border: allBorders });
+                setCell('C7', { font: bodyFont, alignment: leftAlign, border: allBorders });
 
                 // 行9-11: 作業内容
                 setCell('A10', { font: headerFont, alignment: { horizontal: 'left', vertical: 'center', wrapText: true }, border: allBorders });
-                setCell('C10', { font: bodyFont, alignment: topLeftAlign, border: allBorders });
+                setCell('C10', { font: bodyFont, alignment: leftAlign, border: allBorders });
 
                 // 行12-14: 目標
                 setCell('A13', { font: headerFont, alignment: { horizontal: 'left', vertical: 'center', wrapText: true }, border: allBorders });
-                setCell('C13', { font: bodyFont, alignment: topLeftAlign, border: allBorders });
+                setCell('C13', { font: bodyFont, alignment: leftAlign, border: allBorders });
 
                 // 行15: 記録者・確認者
                 setCell('A16', { font: headerFont, alignment: centerAlign, border: allBorders, fill: methodRowFill });
-                setCell('E16', { font: headerFont, alignment: centerAlign, border: allBorders, fill: methodRowFill });
+                setCell('E16', { font: { bold: true, sz: 8, name: 'ＭＳ Ｐゴシック' }, alignment: centerAlign, border: allBorders, fill: methodRowFill });
 
                 // 行16: フッター
                 for (let c = 0; c <= 8; c++) {
@@ -744,7 +744,10 @@
                 XLSX.writeFile(wb, fileName);
             };
 
-            // 1ヶ月分帳票出力
+            // 1ヶ月分帳票出力（1シートにまとめる）
+            const FORM_ROWS = 17; // 1帳票あたりの行数（行0~16）
+            const FORM_GAP = 1;   // 帳票間の空白行数
+
             const exportMonthlyFormattedExcel = (userId, year, month) => {
                 const user = users.find(u => u.id === userId);
                 if (!user) { alert('利用者を選択してください'); return; }
@@ -760,13 +763,158 @@
                     return;
                 }
 
+                // 1つのシートに全帳票をまとめる
                 const wb = XLSX.utils.book_new();
+                const ws = {};
+                ws['!merges'] = [];
+                ws['!rows'] = [];
+                ws['!cols'] = [
+                    { wch: 14 }, { wch: 10 }, { wch: 10 }, { wch: 5 },
+                    { wch: 14 }, { wch: 10 }, { wch: 14 }, { wch: 8 }, { wch: 12 }
+                ];
+
+                const setCell = (addr, value, style) => {
+                    ws[addr] = { v: value, t: 's', s: style };
+                };
+
+                let currentRow = 0;
+
                 monthRecords.forEach((rec, idx) => {
-                    const ws = createFormSheet(rec);
-                    const sheetName = `第${idx + 1}週_${rec.implementationDate}`;
-                    XLSX.utils.book_append_sheet(wb, ws, sheetName.substring(0, 31));
+                    const offset = currentRow;
+                    const userObj = users.find(u => u.id === rec.userId);
+                    const userName = userObj ? userObj.name : '不明';
+                    const isMethod = (key) => rec.selectedMethod === key ? '✔' : '';
+
+                    // シートデータ
+                    const data = [
+                        ['評価 ※1', '', '', '', '※1 評価は作業・訓練対象日(期間最終日)の1週間以内に実施すること', '', '', '', ''],
+                        ['実施日', getFormattedDate(rec.implementationDate), '', '', '前回実施日', getFormattedDate(rec.previousDate), '', '', ''],
+                        ['方法', '', 'LINE', isMethod('line'), 'Discord', isMethod('discord'), 'Googleフォーム', isMethod('googleForm'), ''],
+                        ['', '', '訪問', isMethod('visit'), '通所', isMethod('commute'), '電話', isMethod('phone'), ''],
+                        ['対象期間', getFormattedDate(rec.periodStart), '', '～', getFormattedDate(rec.periodEnd), '', '', '', ''],
+                        ['', '', '', '', 'モニタリング内容', '', '', '', ''],
+                        ['体調について', '', rec.condition || '', '', '', '', '', '', ''],
+                        ['', '', '', '', '', '', '', '', ''],
+                        ['', '', '', '', '', '', '', '', ''],
+                        ['在宅での作業内容に', '', rec.workContent || '', '', '', '', '', '', ''],
+                        ['ついて', '', '', '', '', '', '', '', ''],
+                        ['', '', '', '', '', '', '', '', ''],
+                        ['今後の目標', '', rec.goals || '', '', '', '', '', '', ''],
+                        ['', '', '', '', '', '', '', '', ''],
+                        ['', '', '', '', '', '', '', '', ''],
+                        ['記録者', rec.recorder || '', '', '', '確認者(サービス\n管理責任者)', rec.manager || '', '', '', ''],
+                        ['', '', '', '', '', '', '評価内容はサービス管理責任者が必ず確認すること', '', ''],
+                    ];
+
+                    // データをセルに書き込み
+                    data.forEach((row, r) => {
+                        row.forEach((val, c) => {
+                            const addr = XLSX.utils.encode_cell({ r: offset + r, c });
+                            ws[addr] = { v: val, t: 's', s: { font: bodyFont, border: allBorders, alignment: centerAlign } };
+                        });
+                    });
+
+                    // 行高さ設定
+                    const rowHeights = [30, 22, 20, 20, 22, 25, 30, 30, 30, 30, 30, 30, 30, 30, 30, 25, 18];
+                    rowHeights.forEach((h, i) => { ws['!rows'][offset + i] = { hpt: h }; });
+
+                    // セル結合（オフセット適用）
+                    const merges = [
+                        { s: { r: 0, c: 0 }, e: { r: 0, c: 1 } },
+                        { s: { r: 0, c: 4 }, e: { r: 0, c: 8 } },
+                        { s: { r: 1, c: 1 }, e: { r: 1, c: 3 } },
+                        { s: { r: 1, c: 5 }, e: { r: 1, c: 8 } },
+                        { s: { r: 2, c: 0 }, e: { r: 3, c: 1 } },
+                        { s: { r: 4, c: 1 }, e: { r: 4, c: 2 } },
+                        { s: { r: 4, c: 4 }, e: { r: 4, c: 5 } },
+                        { s: { r: 5, c: 0 }, e: { r: 5, c: 8 } },
+                        { s: { r: 6, c: 0 }, e: { r: 8, c: 1 } },
+                        { s: { r: 6, c: 2 }, e: { r: 8, c: 8 } },
+                        { s: { r: 9, c: 0 }, e: { r: 11, c: 1 } },
+                        { s: { r: 9, c: 2 }, e: { r: 11, c: 8 } },
+                        { s: { r: 12, c: 0 }, e: { r: 14, c: 1 } },
+                        { s: { r: 12, c: 2 }, e: { r: 14, c: 8 } },
+                        { s: { r: 15, c: 1 }, e: { r: 15, c: 3 } },
+                        { s: { r: 15, c: 5 }, e: { r: 15, c: 8 } },
+                        { s: { r: 16, c: 6 }, e: { r: 16, c: 8 } },
+                    ];
+                    merges.forEach(m => {
+                        ws['!merges'].push({
+                            s: { r: m.s.r + offset, c: m.s.c },
+                            e: { r: m.e.r + offset, c: m.e.c }
+                        });
+                    });
+
+                    // スタイル適用
+                    const sc = (r, c, style) => {
+                        const addr = XLSX.utils.encode_cell({ r: offset + r, c });
+                        if (!ws[addr]) ws[addr] = { v: '', t: 's' };
+                        ws[addr].s = { ...ws[addr].s, ...style };
+                    };
+
+                    // 行0: タイトル
+                    sc(0, 0, { font: titleFont, alignment: { horizontal: 'left', vertical: 'center' }, border: { bottom: thinBorder } });
+                    sc(0, 1, { font: titleFont, border: { bottom: thinBorder } });
+                    for (let c = 2; c <= 3; c++) sc(0, c, { border: {}, font: noteFont });
+                    sc(0, 4, { font: noteFont, alignment: { horizontal: 'left', vertical: 'center', wrapText: true }, border: {} });
+                    for (let c = 5; c <= 8; c++) sc(0, c, { font: noteFont, border: {} });
+
+                    // 行1: 実施日
+                    sc(1, 0, { font: headerFont, alignment: centerAlign, border: allBorders, fill: methodRowFill });
+                    sc(1, 4, { font: headerFont, alignment: centerAlign, border: allBorders, fill: methodRowFill });
+
+                    // 行2-3: 方法
+                    sc(2, 0, { font: headerFont, alignment: centerAlign, border: allBorders, fill: methodRowFill });
+                    for (let r = 2; r <= 3; r++) {
+                        for (let c = 2; c <= 8; c++) {
+                            sc(r, c, { font: bodyFont, alignment: centerAlign, border: allBorders });
+                        }
+                    }
+
+                    // 行4: 対象期間
+                    sc(4, 0, { font: headerFont, alignment: centerAlign, border: allBorders, fill: methodRowFill });
+
+                    // 行5: モニタリング内容（青色背景）
+                    for (let c = 0; c <= 8; c++) {
+                        sc(5, c, { font: { bold: true, sz: 12, name: 'ＭＳ Ｐゴシック', color: { rgb: 'FFFFFF' } }, alignment: centerAlign, fill: { fgColor: { rgb: '4472C4' } }, border: allBorders });
+                    }
+
+                    // 行6-8: 体調
+                    sc(6, 0, { font: headerFont, alignment: { horizontal: 'left', vertical: 'center', wrapText: true }, border: allBorders });
+                    sc(6, 2, { font: bodyFont, alignment: leftAlign, border: allBorders });
+
+                    // 行9-11: 作業内容
+                    sc(9, 0, { font: headerFont, alignment: { horizontal: 'left', vertical: 'center', wrapText: true }, border: allBorders });
+                    sc(9, 2, { font: bodyFont, alignment: leftAlign, border: allBorders });
+
+                    // 行12-14: 目標
+                    sc(12, 0, { font: headerFont, alignment: { horizontal: 'left', vertical: 'center', wrapText: true }, border: allBorders });
+                    sc(12, 2, { font: bodyFont, alignment: leftAlign, border: allBorders });
+
+                    // 行15: 記録者・確認者
+                    sc(15, 0, { font: headerFont, alignment: centerAlign, border: allBorders, fill: methodRowFill });
+                    sc(15, 4, { font: { bold: true, sz: 8, name: 'ＭＳ Ｐゴシック' }, alignment: centerAlign, border: allBorders, fill: methodRowFill });
+
+                    // 行16: フッター
+                    for (let c = 0; c <= 8; c++) {
+                        sc(16, c, { border: {}, font: noteFont });
+                    }
+
+                    // 次の帳票の開始行（空白行を挟む）
+                    currentRow += FORM_ROWS + FORM_GAP;
                 });
 
+                // シート範囲を設定
+                const totalRows = currentRow - FORM_GAP; // 最後の空白行は不要
+                ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: totalRows - 1, c: 8 } });
+
+                // 印刷設定（改ページ）
+                ws['!rowBreaks'] = [];
+                for (let i = 0; i < monthRecords.length - 1; i++) {
+                    ws['!rowBreaks'].push({ R: (i + 1) * (FORM_ROWS + FORM_GAP) - FORM_GAP });
+                }
+
+                XLSX.utils.book_append_sheet(wb, ws, '週評価');
                 XLSX.writeFile(wb, `${user.name}_${year}年${month}月_週評価帳票.xlsx`);
             };
 
@@ -860,7 +1008,7 @@
                     出力はプレーンテキストのみ。
                 `;
 
-                const modelsToTry = ['gemini-2.0-flash', 'gemini-flash-latest', 'gemini-1.5-flash-latest', 'gemini-pro'];
+                const modelsToTry = ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash', 'gemini-1.5-pro'];
                 let success = false, lastError = null;
                 try {
                     if (!window.GoogleGenerativeAI) throw new Error('AI SDKが読み込まれていません。');

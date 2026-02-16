@@ -688,16 +688,13 @@
                     出力は作成した文章のみを行ってください（JSONではなく、プレーンテキストで出力）。文章は2〜3文に収めてください。
                 `;
 
-                // 試行するモデルのリスト (2.0系 -> 1.5系 -> 具体的なバージョン)
+                // 試行するモデルのリスト (診断結果に基づき優先順位変更)
                 const modelsToTry = [
+                    'gemini-2.5-flash',
                     'gemini-2.0-flash',
                     'gemini-2.0-flash-lite',
-                    'gemini-1.5-flash',
-                    'gemini-1.5-flash-latest',
-                    'gemini-1.5-flash-001',
-                    'gemini-1.5-flash-002',
-                    'gemini-1.5-flash-8b',
-                    'gemini-1.5-pro-001'
+                    'gemini-flash-latest',
+                    'gemini-pro-latest'
                 ];
 
                 let success = false;
@@ -1241,14 +1238,11 @@
                 `;
 
                 const modelsToTry = [
+                    'gemini-2.5-flash',
                     'gemini-2.0-flash',
                     'gemini-2.0-flash-lite',
-                    'gemini-1.5-flash',
-                    'gemini-1.5-flash-latest',
-                    'gemini-1.5-flash-001',
-                    'gemini-1.5-flash-002',
-                    'gemini-1.5-flash-8b',
-                    'gemini-1.5-pro-001'
+                    'gemini-flash-latest',
+                    'gemini-pro-latest'
                 ];
                 let success = false, lastError = null;
                 try {

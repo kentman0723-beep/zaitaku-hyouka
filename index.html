@@ -1616,9 +1616,31 @@
                                         </div>
                                         <div>
                                             <label className="block text-sm font-bold text-gray-500 mb-1">AI機能 (APIキー)</label>
-                                            <div className="input-field bg-gray-100 text-gray-700 flex items-center gap-2">
-                                                <span className={`w-2 h-2 rounded-full ${apiKey ? 'bg-green-500' : 'bg-red-500'}`}></span>
-                                                {apiKey ? '有効 (システム管理)' : '未設定 (管理者に連絡してください)'}
+                                            <div className="input-field bg-gray-100 text-gray-700 flex items-center gap-2 justify-between">
+                                                <div className="flex items-center gap-2">
+                                                    <span className={`w-2 h-2 rounded-full ${apiKey ? 'bg-green-500' : 'bg-red-500'}`}></span>
+                                                    {apiKey ? '有効 (システム管理)' : '未設定 (管理者に連絡してください)'}
+                                                </div>
+                                                {apiKey && (
+                                                    <button
+                                                        onClick={async () => {
+                                                            try {
+                                                                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+                                                                const data = await res.json();
+                                                                if (data.error) throw new Error(data.error.message);
+
+                                                                const availableModels = data.models?.map(m => m.name.replace('models/', '')) || [];
+                                                                alert('利用可能なモデル一覧:\n' + availableModels.join('\n'));
+                                                                console.log('Available models:', availableModels);
+                                                            } catch (e) {
+                                                                alert('モデル確認エラー: ' + e.message);
+                                                            }
+                                                        }}
+                                                        className="text-xs bg-gray-200 hover:bg-gray-300 px-2 py-1 rounded text-gray-700 font-bold"
+                                                    >
+                                                        🔍 接続診断
+                                                    </button>
+                                                )}
                                             </div>
                                         </div>
                                     </div>

@@ -1314,19 +1314,43 @@
                 const methodStr = d.method === 'other' ? `${d.methodOther}` : (methodMap[d.method] || d.method);
 
                 // 実施方法のチェックボックス表現
-                const isMethod = (key) => d.method === key ? '✔' : '';
+                const getCheck = (key) => d.method === key ? '☑' : '□';
+
+                // 行の高さ計算ヘルパー (1行あたり全角35文字と仮定)
+                const BASE_ROW_HEIGHT = 30; // 標準の高さ
+                const CHARS_PER_LINE = 35;
+                const calcRowHeight = (text) => {
+                    if (!text) return BASE_ROW_HEIGHT * 3; // 空の場合は3行分の高さ確保（デフォルト）
+                    const lines = text.split('\n');
+                    let totalLines = 0;
+                    lines.forEach(line => {
+                        totalLines += Math.max(1, Math.ceil(line.length / CHARS_PER_LINE));
+                    });
+                    // 最低3行分は確保、それ以上なら行数×文字の高さ(約18pt)
+                    return Math.max(BASE_ROW_HEIGHT * 3, totalLines * 18);
+                };
+
+                // 各項目の高さを計算
+                const h_goal = calcRowHeight(d.trainingGoal);
+                const h_act = calcRowHeight(d.activities);
+                const h_ach = calcRowHeight(d.achievement);
+                const h_iss = calcRowHeight(d.issues);
+                const h_imp = calcRowHeight(d.improvementPlan);
+                const h_hlt = calcRowHeight(d.healthNotes); // 2行枠
+                const h_oth = calcRowHeight(d.otherNotes); // 2行枠
+                const h_val = calcRowHeight(d.workValidity); // 2行枠
 
                 const data = [
                     // 行0: タイトル
-                    ['在宅における就労達成度評価シート', '', '', '', '', '', `令和${d.targetYear - 2018}年${d.targetMonth}月分`, '', ''], // I列まで
+                    ['在宅における就労達成度評価シート', '', '', '', '', '', `令和${d.targetYear - 2018}年${d.targetMonth}月分`, '', ''],
                     // 行1: 対象者情報
                     ['対象者名', user.name, '', '', '', '受給者証番号', user.number || '', '', ''],
                     // 行2: 実施日
                     ['実施日', `${d.targetYear}年${d.targetMonth}月${new Date(d.implementationDate).getDate()}日`, '', '', '実施時間', `${d.timeStart} ～ ${d.timeEnd}`, '', '', ''],
                     // 行3: 実施方法ヘッダー
-                    ['実施方法', '#', 'LINE', '#', 'Discord', '#', 'Googleフォーム', '#', '電話'],
+                    ['実施方法', getCheck('line'), 'LINE', getCheck('discord'), 'Discord', getCheck('googleForm'), 'Googleフォーム', getCheck('phone'), '電話'],
                     // 行4: 実施方法データ
-                    ['', '#', '訪問', '#', '通所', '#', '', '#', ''],
+                    ['', getCheck('visit'), '訪問', getCheck('commute'), '通所', getCheck('other'), 'その他', '', ''],
                     // 行5-7: 訓練目標
                     ['訓練目標', d.trainingGoal || '', '', '', '', '', '', '', ''],
                     ['', '', '', '', '', '', '', '', ''],
@@ -1366,17 +1390,63 @@
 
                 const ws = XLSX.utils.aoa_to_sheet(data);
 
+                // 行の高さ設定 (動的計算結果を適用)
+                // 3行結合の項目は、合計高さを3で割る
+                // 2行結合の項目は、合計高さを2で割る
+                ws['!rows'] = [];
+                ws['!rows'][0] = { hpt: 30 }; // タイトル
+                ws['!rows'][1] = { hpt: 25 }; // 対象者
+                ws['!rows'][2] = { hpt: 25 }; // 実施日
+                ws['!rows'][3] = { hpt: 20 }; // 方法1
+                ws['!rows'][4] = { hpt: 20 }; // 方法2
+
+                // 訓練目標 (3行)
+                const h_goal_per_row = h_goal / 3;
+                [5, 6, 7].forEach(r => ws['!rows'][r] = { hpt: h_goal_per_row });
+
+                // 取組内容 (3行)
+                const h_act_per_row = h_act / 3;
+                [8, 9, 10].forEach(r => ws['!rows'][r] = { hpt: h_act_per_row });
+
+                // 達成度 (3行)
+                const h_ach_per_row = h_ach / 3;
+                [11, 12, 13].forEach(r => ws['!rows'][r] = { hpt: h_ach_per_row });
+
+                // 課題 (3行)
+                const h_iss_per_row = h_iss / 3;
+                [14, 15, 16].forEach(r => ws['!rows'][r] = { hpt: h_iss_per_row });
+
+                // 改善方針 (3行)
+                const h_imp_per_row = h_imp / 3;
+                [17, 18, 19].forEach(r => ws['!rows'][r] = { hpt: h_imp_per_row });
+
+                // 健康面 (2行)
+                const h_hlt_per_row = Math.max(BASE_ROW_HEIGHT, h_hlt / 2); // 最低でもBASE確保
+                [20, 21].forEach(r => ws['!rows'][r] = { hpt: h_hlt_per_row });
+
+                // その他 (2行)
+                const h_oth_per_row = Math.max(BASE_ROW_HEIGHT, h_oth / 2);
+                [22, 23].forEach(r => ws['!rows'][r] = { hpt: h_oth_per_row });
+
+                // 妥当性 (2行)
+                const h_val_per_row = Math.max(BASE_ROW_HEIGHT, h_val / 2);
+                [24, 25].forEach(r => ws['!rows'][r] = { hpt: h_val_per_row });
+
+                ws['!rows'][26] = { hpt: 25 }; // 実施者
+                ws['!rows'][27] = { hpt: 25 }; // 確認文
+                ws['!rows'][28] = { hpt: 40 }; // 署名欄
+
                 // 列幅設定
                 ws['!cols'] = [
                     { wch: 18 }, // A: ラベル
-                    { wch: 10 }, // B
-                    { wch: 10 }, // C
-                    { wch: 5 },  // D
-                    { wch: 14 }, // E
-                    { wch: 10 }, // F
-                    { wch: 14 }, // G
-                    { wch: 8 },  // H
-                    { wch: 12 }, // I
+                    { wch: 5 },  // B: チェック
+                    { wch: 14 }, // C: 項目名
+                    { wch: 5 },  // D: チェック
+                    { wch: 14 }, // E: 項目名
+                    { wch: 5 },  // F: チェック
+                    { wch: 14 }, // G: 項目名
+                    { wch: 5 },  // H: チェック
+                    { wch: 12 }, // I: 項目名
                 ];
 
                 // セル結合
@@ -1438,9 +1508,16 @@
                     setStyle(r, 1, { font: bodyFont, alignment: topLeftAlign, wrapText: true });
                 });
 
-                // 方法欄のレイアウト調整（画像1を推測：チェックボックス風）
+                // 方法欄のレイアウト調整
                 // isMethodを使って値を配置する必要がありますが、今回は文字列で代用した箇所を修正
-                // 実際にはdata配列内で '✔' を配置済み
+
+                // チェックボックスのフォントサイズ調整
+                for (let r = 3; r <= 4; r++) {
+                    for (let c = 1; c <= 7; c += 2) {
+                        const addr = XLSX.utils.encode_cell({ r, c });
+                        if (ws[addr]) ws[addr].s = { ...ws[addr].s, font: { sz: 12, name: 'ＭＳ Ｐゴシック' }, alignment: centerAlign };
+                    }
+                }
 
                 return ws;
             };

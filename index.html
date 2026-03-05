@@ -519,6 +519,11 @@
                 const month = monthlyFormData.targetMonth;
                 const currentKey = apiKey || MANUAL_API_KEY;
 
+                // APIキーチェック
+                if (!currentKey) {
+                    alert('⚠️ APIキーが設定されていません。AI自動生成ができないため、課題・改善方針等の欄は空白になります。\n\n設定画面でAPIキーを確認してください。');
+                }
+
                 // 対象月の週評価データがある利用者を取得
                 const usersWithRecords = users.filter(user => {
                     return records.some(r => {
@@ -547,6 +552,8 @@
 
                 const implementationDate = `${year}-${String(month).padStart(2, '0')}-15`;
                 const newEvals = [];
+                let aiSuccessCount = 0;
+                let aiFailCount = 0;
 
                 for (const user of usersWithRecords) {
                     const userRecords = records.filter(r => {
@@ -587,15 +594,24 @@
                                 console.log(`AI生成中: ${field.key} for ${user.name}`);
                                 const result = await generateGeminiContent(prompt, baseContext, currentKey, (s) => console.log(s));
                                 console.log(`AI生成完了: ${field.key} = ${(result || '').substring(0, 50)}...`);
-                                if (field.key === 'issues') issues = (result || '').trim();
-                                else if (field.key === 'improvementPlan') improvementPlan = (result || '').trim();
-                                else if (field.key === 'healthNotes') healthNotes = (result || '').trim();
-                                else if (field.key === 'otherNotes') otherNotes = (result || '').trim();
-                                else if (field.key === 'workValidity') workValidity = (result || '').trim();
+                                if (result && result.trim()) {
+                                    aiSuccessCount++;
+                                    if (field.key === 'issues') issues = result.trim();
+                                    else if (field.key === 'improvementPlan') improvementPlan = result.trim();
+                                    else if (field.key === 'healthNotes') healthNotes = result.trim();
+                                    else if (field.key === 'otherNotes') otherNotes = result.trim();
+                                    else if (field.key === 'workValidity') workValidity = result.trim();
+                                } else {
+                                    aiFailCount++;
+                                    console.warn(`AI生成結果が空: ${field.key}`);
+                                }
                             } catch (e) {
+                                aiFailCount++;
                                 console.error(`AI generation failed for ${field.key}:`, e);
                             }
                         }
+                    } else {
+                        console.warn(`AI生成スキップ: currentKey=${!!currentKey}, trainingGoal=${trainingGoal}`);
                     }
 
                     // 前月の評価日を検索
@@ -633,7 +649,8 @@
                     return [...filtered, ...newEvals];
                 });
 
-                alert(`${usersWithRecords.length}名分の${month}月達成度評価を自動作成しました。\n下の一覧からExcelダウンロードできます。`);
+                const aiMsg = currentKey ? `\nAI生成: 成功${aiSuccessCount}件, 失敗${aiFailCount}件` : '\n⚠️ APIキー未設定のためAI生成はスキップされました';
+                alert(`${usersWithRecords.length}名分の${month}月達成度評価を自動作成しました。${aiMsg}\n下の一覧からExcelダウンロードできます。`);
             };
 
             // --- 保存済み月次評価を個別Excel出力 ---

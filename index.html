@@ -643,12 +643,12 @@
                             if (!workingModelName) {
                                 console.warn(`${user.name}: モデル未検出のためAI生成スキップ`);
                             } else {
-                                // 1回のAPI呼び出しで5つの項目を一括生成
-                                try {
-                                    const genAI = new window.GoogleGenerativeAI(currentKey);
-                                    const model = genAI.getGenerativeModel({ model: workingModelName });
+                                // 1回のAPI呼び出しで5つの項目を一括生成（リトライ付き）
+                                const genAI = new window.GoogleGenerativeAI(currentKey);
+                                const model = genAI.getGenerativeModel({ model: workingModelName });
+                                let generated = false;
 
-                                    const batchPrompt = `あなたは障害福祉サービスの就労継続支援B型の支援員です。在宅における就労達成度評価シートの記入を行っています。
+                                const batchPrompt = `あなたは障害福祉サービスの就労継続支援B型の支援員です。在宅における就労達成度評価シートの記入を行っています。
 
 以下の利用者情報をもとに、5つの項目をそれぞれ作成してください。
 各項目は【項目名】で区切って出力してください。出力はプレーンテキストのみ。
@@ -672,49 +672,53 @@ ${baseContext}
 【妥当性】
 在宅就労継続の妥当性を1〜2文で。作業状況の確認と定期的な検討について。例：「在宅での作業状況を確認し、継続の妥当性について定期的に検討していく。」`;
 
-                                    console.log(`AI一括生成中: ${user.name} (model: ${workingModelName})`);
-                                    const result = await model.generateContent(batchPrompt);
-                                    const response = await result.response;
-                                    const fullText = response.text();
-                                    console.log(`AI一括生成完了: ${user.name}, 文字数: ${fullText.length}`);
+                                for (let attempt = 1; attempt <= 3 && !generated; attempt++) {
+                                    try {
+                                        if (attempt > 1) {
+                                            const retryWait = attempt * 10000; // 10秒, 20秒
+                                            console.log(`リトライ ${attempt}/3 (${retryWait / 1000}秒待機後)`);
+                                            await new Promise(resolve => setTimeout(resolve, retryWait));
+                                        }
 
-                                    if (fullText && fullText.trim()) {
-                                        // パース: 【項目名】で分割
-                                        const parseSection = (text, startTag, endTags) => {
-                                            const startIdx = text.indexOf(startTag);
-                                            if (startIdx === -1) return '';
-                                            const afterStart = text.substring(startIdx + startTag.length);
-                                            let endIdx = afterStart.length;
-                                            for (const tag of endTags) {
-                                                const idx = afterStart.indexOf(tag);
-                                                if (idx !== -1 && idx < endIdx) endIdx = idx;
-                                            }
-                                            return afterStart.substring(0, endIdx).trim();
-                                        };
+                                        console.log(`AI一括生成中: ${user.name} (model: ${workingModelName}, attempt: ${attempt})`);
+                                        const result = await model.generateContent(batchPrompt);
+                                        const response = await result.response;
+                                        const fullText = response.text();
+                                        console.log(`AI一括生成完了: ${user.name}, 文字数: ${fullText.length}`);
 
-                                        issues = parseSection(fullText, '【課題】', ['【改善方針】', '【健康面】', '【その他】', '【妥当性】']);
-                                        improvementPlan = parseSection(fullText, '【改善方針】', ['【健康面】', '【その他】', '【妥当性】']);
-                                        healthNotes = parseSection(fullText, '【健康面】', ['【その他】', '【妥当性】']);
-                                        otherNotes = parseSection(fullText, '【その他】', ['【妥当性】']);
-                                        workValidity = parseSection(fullText, '【妥当性】', []);
+                                        if (fullText && fullText.trim()) {
+                                            const parseSection = (text, startTag, endTags) => {
+                                                const startIdx = text.indexOf(startTag);
+                                                if (startIdx === -1) return '';
+                                                const afterStart = text.substring(startIdx + startTag.length);
+                                                let endIdx = afterStart.length;
+                                                for (const tag of endTags) {
+                                                    const idx = afterStart.indexOf(tag);
+                                                    if (idx !== -1 && idx < endIdx) endIdx = idx;
+                                                }
+                                                return afterStart.substring(0, endIdx).trim();
+                                            };
 
-                                        const fieldsGenerated = [issues, improvementPlan, healthNotes, otherNotes, workValidity].filter(f => f).length;
-                                        aiSuccessCount += fieldsGenerated;
-                                        aiFailCount += (5 - fieldsGenerated);
-                                        console.log(`${user.name}: ${fieldsGenerated}/5 フィールド生成成功`);
-                                    } else {
-                                        aiFailCount += 5;
+                                            issues = parseSection(fullText, '【課題】', ['【改善方針】', '【健康面】', '【その他】', '【妥当性】']);
+                                            improvementPlan = parseSection(fullText, '【改善方針】', ['【健康面】', '【その他】', '【妥当性】']);
+                                            healthNotes = parseSection(fullText, '【健康面】', ['【その他】', '【妥当性】']);
+                                            otherNotes = parseSection(fullText, '【その他】', ['【妥当性】']);
+                                            workValidity = parseSection(fullText, '【妥当性】', []);
+
+                                            const fieldsGenerated = [issues, improvementPlan, healthNotes, otherNotes, workValidity].filter(f => f).length;
+                                            aiSuccessCount += fieldsGenerated;
+                                            aiFailCount += (5 - fieldsGenerated);
+                                            generated = true;
+                                        }
+                                    } catch (e) {
+                                        console.warn(`AI生成エラー (${user.name}, attempt ${attempt}):`, e.message);
+                                        if (!firstError) firstError = e.message;
+                                        if (attempt === 3) aiFailCount += 5;
                                     }
-
-                                    // レート制限回避のため3秒待機
-                                    await new Promise(resolve => setTimeout(resolve, 3000));
-                                } catch (e) {
-                                    aiFailCount += 5;
-                                    if (!firstError) firstError = e.message;
-                                    console.error(`AI一括生成失敗 (${user.name}):`, e.message);
-                                    // エラー時は5秒待機
-                                    await new Promise(resolve => setTimeout(resolve, 5000));
                                 }
+
+                                // レート制限回避のため5秒待機
+                                await new Promise(resolve => setTimeout(resolve, 5000));
                             }
                         } else {
                             console.warn(`AI生成スキップ: currentKey=${!!currentKey}, trainingGoal=${trainingGoal}`);

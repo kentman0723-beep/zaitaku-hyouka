@@ -172,6 +172,24 @@
                 content: '';
             }
         }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: scale(0.95);
+            }
+
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
     </style>
 </head>
 
@@ -477,6 +495,11 @@
             });
             const [monthlyLoading, setMonthlyLoading] = useState({});
 
+            // --- 週評価 自動作成用 State ---
+            const [autoCreatePopup, setAutoCreatePopup] = useState(null);
+            // { targetDate: 'YYYY-MM-DD', targetUsers: [...], periodStart: '...', periodEnd: '...' }
+            const [autoCreateLoading, setAutoCreateLoading] = useState(false);
+
             // --- 保存済み月次評価データ ---
             const [savedMonthlyEvals, setSavedMonthlyEvals] = useState(() => {
                 try {
@@ -686,6 +709,139 @@
             // localStorage バックアップ保存
             useEffect(() => { localStorage.setItem('sw_users', JSON.stringify(users)); }, [users]);
             useEffect(() => { localStorage.setItem('sw_records', JSON.stringify(records)); }, [records]);
+
+            // --- 月曜日 自動作成チェック ---
+            useEffect(() => {
+                if (records.length === 0 || users.length === 0) return;
+
+                const today = new Date();
+                const dayOfWeek = today.getDay(); // 0=日, 1=月
+
+                // 月曜日でなければ何もしない
+                if (dayOfWeek !== 1) return;
+
+                // 今日の日付キーで既にポップアップを表示/スキップ済みか確認
+                const todayStr = today.toISOString().split('T')[0];
+                const dismissedKey = `sw_auto_create_dismissed_${todayStr}`;
+                if (localStorage.getItem(dismissedKey)) return;
+
+                // 対象期間を計算（先週月曜日〜日曜日）
+                const lastMon = new Date(today);
+                lastMon.setDate(today.getDate() - 7);
+                const lastSun = new Date(lastMon);
+                lastSun.setDate(lastMon.getDate() + 6);
+                const periodStart = lastMon.toISOString().split('T')[0];
+                const periodEnd = lastSun.toISOString().split('T')[0];
+
+                // 各利用者で、記録が1件以上あり、かつ今週分がまだない利用者を抽出
+                const targetUsers = users.filter(user => {
+                    const userRecords = records.filter(r => r.userId === user.id);
+                    if (userRecords.length === 0) return false;
+                    // 同じ対象期間の記録が既にあるかチェック
+                    const alreadyExists = userRecords.some(r => r.periodStart === periodStart && r.periodEnd === periodEnd);
+                    return !alreadyExists;
+                });
+
+                if (targetUsers.length === 0) return;
+
+                setAutoCreatePopup({
+                    targetDate: todayStr,
+                    targetUsers,
+                    periodStart,
+                    periodEnd
+                });
+            }, [records, users]);
+
+            // --- 週評価 自動作成関数（AI言い回し変換付き） ---
+            const autoCreateWeeklyRecords = async () => {
+                if (!autoCreatePopup) return;
+                const currentKey = apiKey || MANUAL_API_KEY;
+
+                setAutoCreateLoading(true);
+                const { targetDate, targetUsers, periodStart, periodEnd } = autoCreatePopup;
+                const newRecords = [];
+
+                for (const user of targetUsers) {
+                    // 最新の記録を取得
+                    const userRecords = records
+                        .filter(r => r.userId === user.id)
+                        .sort((a, b) => new Date(b.implementationDate) - new Date(a.implementationDate));
+                    const latest = userRecords[0];
+                    if (!latest) continue;
+
+                    // AI で言い回しを変える
+                    let newCondition = latest.condition || '';
+                    let newWorkContent = latest.workContent || '';
+                    let newGoals = latest.goals || '';
+
+                    if (currentKey) {
+                        const rephrasePrompt = (fieldName, text) => {
+                            const fieldDesc = {
+                                condition: '利用者の体調について',
+                                workContent: '在宅での1週間の作業内容について',
+                                goals: '今後の目標'
+                            };
+                            return `
+あなたは障害福祉サービスの就労継続支援B型の支援員です。
+以下は前回の週評価の「${fieldDesc[fieldName]}」の記録です。
+この内容を参考に、同じ意味合い・状況を維持しつつ、言い回しや表現を少し変えた新しい文章を作成してください。
+文章の長さは元の文章とほぼ同じにしてください。「です・ます」調で、2〜3文程度にしてください。
+出力は作成した文章のみを行ってください。
+
+【前回の記録】
+${text}`;
+                        };
+
+                        try {
+                            const [c, w, g] = await Promise.all([
+                                latest.condition ? generateGeminiContent(rephrasePrompt('condition', latest.condition), '', currentKey, null).catch(() => latest.condition) : Promise.resolve(''),
+                                latest.workContent ? generateGeminiContent(rephrasePrompt('workContent', latest.workContent), '', currentKey, null).catch(() => latest.workContent) : Promise.resolve(''),
+                                latest.goals ? generateGeminiContent(rephrasePrompt('goals', latest.goals), '', currentKey, null).catch(() => latest.goals) : Promise.resolve('')
+                            ]);
+                            newCondition = (c || '').trim() || latest.condition;
+                            newWorkContent = (w || '').trim() || latest.workContent;
+                            newGoals = (g || '').trim() || latest.goals;
+                        } catch (e) {
+                            console.warn('AI rephrasing failed, using original text:', e);
+                        }
+                    }
+
+                    const newRecord = {
+                        id: generateId(),
+                        userId: user.id,
+                        implementationDate: targetDate,
+                        previousDate: latest.implementationDate,
+                        periodStart,
+                        periodEnd,
+                        selectedMethod: latest.selectedMethod || 'commute',
+                        condition: newCondition,
+                        workContent: newWorkContent,
+                        goals: newGoals,
+                        recorder: latest.recorder || '',
+                        manager: '近藤恵子'
+                    };
+                    newRecords.push(newRecord);
+                }
+
+                // 保存
+                for (const rec of newRecords) {
+                    await saveRecordToSupabase(rec);
+                }
+                setRecords(prev => [...newRecords, ...prev]);
+
+                // ポップアップを閉じ、今日は再表示しない
+                localStorage.setItem(`sw_auto_create_dismissed_${targetDate}`, 'done');
+                setAutoCreatePopup(null);
+                setAutoCreateLoading(false);
+                alert(`${newRecords.length}名分の週評価を自動作成しました。`);
+            };
+
+            const dismissAutoCreate = () => {
+                if (autoCreatePopup) {
+                    localStorage.setItem(`sw_auto_create_dismissed_${autoCreatePopup.targetDate}`, 'skipped');
+                }
+                setAutoCreatePopup(null);
+            };
 
             // APIキーの取得（Supabaseから自動取得）
             useEffect(() => {
@@ -1649,6 +1805,51 @@
 
             return (
                 <div className="flex h-screen overflow-hidden">
+                    {/* --- 週評価 自動作成 確認ポップアップ --- */}
+                    {autoCreatePopup && (
+                        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}>
+                            <div style={{ background: 'white', borderRadius: '1rem', padding: '2rem', maxWidth: '500px', width: '90%', boxShadow: '0 25px 50px rgba(0,0,0,0.25)', animation: 'fadeIn 0.3s ease' }}>
+                                <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+                                    <div style={{ fontSize: '3rem', marginBottom: '0.5rem' }}>📋</div>
+                                    <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#1f2937', margin: '0 0 0.5rem' }}>週評価の自動作成</h3>
+                                    <p style={{ color: '#6b7280', fontSize: '0.95rem', lineHeight: 1.6 }}>
+                                        {(() => {
+                                            const d = new Date(autoCreatePopup.targetDate);
+                                            return `${d.getMonth() + 1}月${d.getDate()}日実施分の週評価記録を自動作成してもよろしいでしょうか？`;
+                                        })()}
+                                    </p>
+                                </div>
+                                <div style={{ background: '#f9fafb', borderRadius: '0.5rem', padding: '1rem', marginBottom: '1.5rem', maxHeight: '200px', overflowY: 'auto' }}>
+                                    <p style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#6b7280', marginBottom: '0.5rem' }}>対象利用者（{autoCreatePopup.targetUsers.length}名）:</p>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                        {autoCreatePopup.targetUsers.map(u => (
+                                            <span key={u.id} style={{ background: '#e0f2fe', color: '#0369a1', padding: '0.25rem 0.75rem', borderRadius: '9999px', fontSize: '0.85rem', fontWeight: 500 }}>{u.name}</span>
+                                        ))}
+                                    </div>
+                                </div>
+                                <p style={{ fontSize: '0.75rem', color: '#9ca3af', textAlign: 'center', marginBottom: '1rem' }}>
+                                    ※ 前回の記録をもとにAIが言い回しを変えて作成します
+                                </p>
+                                {autoCreateLoading ? (
+                                    <div style={{ textAlign: 'center', padding: '1rem' }}>
+                                        <div style={{ display: 'inline-block', width: '2rem', height: '2rem', border: '3px solid #e5e7eb', borderTop: '3px solid #10b981', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+                                        <p style={{ color: '#6b7280', marginTop: '0.75rem', fontSize: '0.9rem' }}>AIで文章を生成中...</p>
+                                    </div>
+                                ) : (
+                                    <div style={{ display: 'flex', gap: '0.75rem' }}>
+                                        <button onClick={dismissAutoCreate} style={{ flex: 1, padding: '0.75rem', borderRadius: '0.5rem', border: '2px solid #e5e7eb', background: 'white', color: '#6b7280', fontWeight: 600, cursor: 'pointer', fontSize: '0.95rem', transition: 'all 0.2s' }}
+                                            onMouseOver={e => e.target.style.background = '#f3f4f6'}
+                                            onMouseOut={e => e.target.style.background = 'white'}
+                                        >スキップ</button>
+                                        <button onClick={autoCreateWeeklyRecords} style={{ flex: 1, padding: '0.75rem', borderRadius: '0.5rem', border: 'none', background: 'linear-gradient(135deg, #10b981, #059669)', color: 'white', fontWeight: 600, cursor: 'pointer', fontSize: '0.95rem', boxShadow: '0 4px 12px rgba(16,185,129,0.3)', transition: 'all 0.2s' }}
+                                            onMouseOver={e => { e.target.style.transform = 'translateY(-1px)'; e.target.style.boxShadow = '0 6px 16px rgba(16,185,129,0.4)'; }}
+                                            onMouseOut={e => { e.target.style.transform = 'none'; e.target.style.boxShadow = '0 4px 12px rgba(16,185,129,0.3)'; }}
+                                        >自動作成する</button>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
                     {/* サイドバー */}
                     <div className="w-64 bg-white border-r flex flex-col shadow-lg z-10">
                         <div className="p-6 border-b flex items-center gap-3">

@@ -583,15 +583,17 @@
 
                         for (const field of aiFields) {
                             try {
-                                const prompt = `あなたは障害福祉サービスの就労継続支援B型の支援員です。在宅における就労達成度評価シートの記入を行っています。\n\n【指示】${field.instruction}\n福祉支援記録として適切な「です・ます」調の文章にしてください。出力はプレーンテキストのみ。\n${baseContext}`;
-                                const result = await generateGeminiContent(prompt, '', currentKey, null).catch(() => '');
+                                const prompt = `あなたは障害福祉サービスの就労継続支援B型の支援員です。在宅における就労達成度評価シートの記入を行っています。\n\n【指示】${field.instruction}\n福祉支援記録として適切な文章にしてください。出力はプレーンテキストのみ。`;
+                                console.log(`AI生成中: ${field.key} for ${user.name}`);
+                                const result = await generateGeminiContent(prompt, baseContext, currentKey, (s) => console.log(s));
+                                console.log(`AI生成完了: ${field.key} = ${(result || '').substring(0, 50)}...`);
                                 if (field.key === 'issues') issues = (result || '').trim();
                                 else if (field.key === 'improvementPlan') improvementPlan = (result || '').trim();
                                 else if (field.key === 'healthNotes') healthNotes = (result || '').trim();
                                 else if (field.key === 'otherNotes') otherNotes = (result || '').trim();
                                 else if (field.key === 'workValidity') workValidity = (result || '').trim();
                             } catch (e) {
-                                console.warn(`AI generation failed for ${field.key}:`, e);
+                                console.error(`AI generation failed for ${field.key}:`, e);
                             }
                         }
                     }
@@ -1700,10 +1702,8 @@ ${text}`;
                     })(),
                     // 行27: 確認文
                     ['上記内容を確認し、評価実施者と共有しました。', '', '', '', '', '', '', '', ''],
-                    // 行28: 対象者署名欄（空白にして記入できるようにする）
-                    ['', '', '', '対象者署名', '', '', '', '', ''],
-                    // 行29: 注意書き
-                    ['', '', '', '', '', '', '・はサービス管理責任者が必ず確認すること', '', '']
+                    // 行28: 対象者署名欄
+                    ['', '', '', '対象者署名', '', '', '', '', '']
                 ];
 
                 const ws = XLSX.utils.aoa_to_sheet(data);
@@ -1751,9 +1751,8 @@ ${text}`;
                 [24, 25].forEach(r => ws['!rows'][r] = { hpt: h_val_per_row });
 
                 ws['!rows'][26] = { hpt: 25 }; // 実施者
-                ws['!rows'][27] = { hpt: 25 }; // 確認文
-                ws['!rows'][28] = { hpt: 40 }; // 対象者署名欄
-                ws['!rows'][29] = { hpt: 18 }; // 注意書き
+                ws['!rows'][27] = { hpt: 30 }; // 確認文
+                ws['!rows'][28] = { hpt: 35 }; // 対象者署名欄
 
                 // 列幅設定
                 ws['!cols'] = [
@@ -1797,9 +1796,8 @@ ${text}`;
                     { s: { r: 27, c: 0 }, e: { r: 27, c: 8 } },
                     // 対象者署名欄
                     { s: { r: 28, c: 0 }, e: { r: 28, c: 2 } }, // 空白
-                    { s: { r: 28, c: 3 }, e: { r: 28, c: 8 } }, // 対象者署名 + 署名スペース
-                    // 注意書き
-                    { s: { r: 29, c: 6 }, e: { r: 29, c: 8 } },
+                    { s: { r: 28, c: 3 }, e: { r: 28, c: 4 } }, // 対象者署名ラベル
+                    { s: { r: 28, c: 5 }, e: { r: 28, c: 8 } }, // 署名記入欄（下線付き）
                 ];
 
                 // スタイル適用
@@ -1859,13 +1857,10 @@ ${text}`;
                 // 行27: 確認文（大きめのフォント）
                 setStyle(27, 0, { font: { bold: true, sz: 12, name: 'ＭＳ Ｐゴシック' }, alignment: { horizontal: 'center', vertical: 'center' }, border: {} });
 
-                // 行28: 対象者署名欄（下線付き）
+                // 行28: 対象者署名欄
                 setStyle(28, 0, { font: bodyFont, alignment: centerAlign, border: {} });
-                setStyle(28, 3, { font: bodyFont, alignment: { horizontal: 'center', vertical: 'bottom' }, border: { bottom: thinBorder } });
-
-                // 行29: 注意書き
-                for (let c = 0; c <= 8; c++) setStyle(29, c, { border: {} });
-                setStyle(29, 6, { font: noteFont, alignment: { horizontal: 'left', vertical: 'center' }, border: {} });
+                setStyle(28, 3, { font: bodyFont, alignment: { horizontal: 'center', vertical: 'center' }, border: allBorders });
+                setStyle(28, 5, { font: bodyFont, alignment: centerAlign, border: { bottom: thinBorder } });
 
                 return ws;
             };

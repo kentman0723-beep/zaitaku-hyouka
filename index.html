@@ -577,6 +577,7 @@
                     const newEvals = [];
                     let aiSuccessCount = 0;
                     let aiFailCount = 0;
+                    let workingModelName = null; // 動作するモデルをキャッシュ
 
                     for (const user of usersWithRecords) {
                         const userRecords = records.filter(r => {
@@ -611,26 +612,60 @@
                                 { key: 'workValidity', instruction: `以下の内容を元に、「在宅就労継続の妥当性」を1〜2文で作成してください。作業状況の確認と定期的な検討について書いてください。例：「在宅での作業状況を確認し、継続の妥当性について定期的に検討していく。」` }
                             ];
 
+                            // 動作するモデルを特定（まだ見つけていない場合）
+                            if (!workingModelName) {
+                                const genAI = new window.GoogleGenerativeAI(currentKey);
+                                const modelsToTry = ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash', 'gemini-1.5-flash-latest'];
+                                for (const modelName of modelsToTry) {
+                                    try {
+                                        console.log(`モデルテスト: ${modelName}`);
+                                        const model = genAI.getGenerativeModel({ model: modelName });
+                                        const testResult = await model.generateContent('テスト。「OK」とだけ返してください。');
+                                        const testResponse = await testResult.response;
+                                        const testText = testResponse.text();
+                                        if (testText) {
+                                            workingModelName = modelName;
+                                            console.log(`動作するモデル発見: ${workingModelName}`);
+                                            break;
+                                        }
+                                    } catch (e) {
+                                        console.warn(`モデル ${modelName} 失敗:`, e.message);
+                                    }
+                                }
+                                if (!workingModelName) {
+                                    console.error('利用可能なモデルが見つかりません');
+                                    break;
+                                }
+                            }
+
+                            // 確定モデルで各フィールドを生成
+                            const genAI = new window.GoogleGenerativeAI(currentKey);
+                            const model = genAI.getGenerativeModel({ model: workingModelName });
+
                             for (const field of aiFields) {
                                 try {
-                                    const prompt = `あなたは障害福祉サービスの就労継続支援B型の支援員です。在宅における就労達成度評価シートの記入を行っています。\n\n【指示】${field.instruction}\n福祉支援記録として適切な文章にしてください。出力はプレーンテキストのみ。`;
-                                    console.log(`AI生成中: ${field.key} for ${user.name}`);
-                                    const result = await generateGeminiContent(prompt, baseContext, currentKey, (s) => console.log(s));
-                                    console.log(`AI生成完了: ${field.key} = ${(result || '').substring(0, 50)}...`);
-                                    if (result && result.trim()) {
+                                    const prompt = `あなたは障害福祉サービスの就労継続支援B型の支援員です。在宅における就労達成度評価シートの記入を行っています。\n\n【指示】${field.instruction}\n福祉支援記録として適切な文章にしてください。出力はプレーンテキストのみ。\n\n【キーワード】\n${baseContext}`;
+                                    console.log(`AI生成中: ${field.key} for ${user.name} (model: ${workingModelName})`);
+                                    const result = await model.generateContent(prompt);
+                                    const response = await result.response;
+                                    const text = response.text();
+                                    if (text && text.trim()) {
                                         aiSuccessCount++;
-                                        if (field.key === 'issues') issues = result.trim();
-                                        else if (field.key === 'improvementPlan') improvementPlan = result.trim();
-                                        else if (field.key === 'healthNotes') healthNotes = result.trim();
-                                        else if (field.key === 'otherNotes') otherNotes = result.trim();
-                                        else if (field.key === 'workValidity') workValidity = result.trim();
+                                        if (field.key === 'issues') issues = text.trim();
+                                        else if (field.key === 'improvementPlan') improvementPlan = text.trim();
+                                        else if (field.key === 'healthNotes') healthNotes = text.trim();
+                                        else if (field.key === 'otherNotes') otherNotes = text.trim();
+                                        else if (field.key === 'workValidity') workValidity = text.trim();
                                     } else {
                                         aiFailCount++;
-                                        console.warn(`AI生成結果が空: ${field.key}`);
                                     }
+                                    // レート制限回避のため1秒待機
+                                    await new Promise(resolve => setTimeout(resolve, 1000));
                                 } catch (e) {
                                     aiFailCount++;
-                                    console.error(`AI generation failed for ${field.key}:`, e);
+                                    console.error(`AI generation failed for ${field.key}:`, e.message);
+                                    // エラー時は2秒待機してから次へ
+                                    await new Promise(resolve => setTimeout(resolve, 2000));
                                 }
                             }
                         } else {

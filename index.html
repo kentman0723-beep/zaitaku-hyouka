@@ -513,163 +513,173 @@
             // localStorage バックアップ（月次評価）
             useEffect(() => { localStorage.setItem('sw_monthly_evaluations', JSON.stringify(savedMonthlyEvals)); }, [savedMonthlyEvals]);
 
+            const [bulkCreating, setBulkCreating] = useState(false);
+
             // --- 全利用者の達成度評価を一括自動作成 ---
             const autoCreateAllMonthlyEvaluations = async () => {
-                const year = monthlyFormData.targetYear;
-                const month = monthlyFormData.targetMonth;
-                let currentKey = apiKey || MANUAL_API_KEY;
+                setBulkCreating(true);
+                try {
+                    const year = monthlyFormData.targetYear;
+                    const month = monthlyFormData.targetMonth;
+                    let currentKey = apiKey || MANUAL_API_KEY;
 
-                // APIキーがない場合、Supabaseから直接取得を試みる
-                if (!currentKey) {
-                    try {
-                        console.log('APIキーをSupabaseから取得中...');
-                        const { data, error } = await supabase
-                            .from('api_keys')
-                            .select('value')
-                            .eq('key', 'gemini_api_key')
-                            .single();
-                        if (!error && data && data.value) {
-                            currentKey = data.value;
-                            setApiKey(data.value);
-                            localStorage.setItem('sw_api_key', data.value);
-                            console.log('APIキーをSupabaseから取得しました');
+                    // APIキーがない場合、Supabaseから直接取得を試みる
+                    if (!currentKey) {
+                        try {
+                            console.log('APIキーをSupabaseから取得中...');
+                            const { data, error } = await supabase
+                                .from('api_keys')
+                                .select('value')
+                                .eq('key', 'gemini_api_key')
+                                .single();
+                            if (!error && data && data.value) {
+                                currentKey = data.value;
+                                setApiKey(data.value);
+                                localStorage.setItem('sw_api_key', data.value);
+                                console.log('APIキーをSupabaseから取得しました');
+                            }
+                        } catch (e) {
+                            console.error('APIキー取得失敗:', e);
                         }
-                    } catch (e) {
-                        console.error('APIキー取得失敗:', e);
                     }
-                }
 
-                if (!currentKey) {
-                    alert('⚠️ APIキーが設定されていません。AI自動生成ができないため、課題・改善方針等の欄は空白になります。\n\n設定画面でAPIキーを確認してください。');
-                }
+                    if (!currentKey) {
+                        alert('⚠️ APIキーが設定されていません。AI自動生成ができないため、課題・改善方針等の欄は空白になります。\n\n設定画面でAPIキーを確認してください。');
+                    }
 
-                // 対象月の週評価データがある利用者を取得
-                const usersWithRecords = users.filter(user => {
-                    return records.some(r => {
-                        if (r.userId !== user.id) return false;
-                        const d = new Date(r.implementationDate);
-                        return d.getFullYear() === year && (d.getMonth() + 1) === month;
+                    // 対象月の週評価データがある利用者を取得
+                    const usersWithRecords = users.filter(user => {
+                        return records.some(r => {
+                            if (r.userId !== user.id) return false;
+                            const d = new Date(r.implementationDate);
+                            return d.getFullYear() === year && (d.getMonth() + 1) === month;
+                        });
                     });
-                });
 
-                if (usersWithRecords.length === 0) {
-                    alert(`${year}年${month}月の週評価データを持つ利用者がいません。`);
-                    return;
-                }
-
-                // 既存の評価との重複チェック
-                const alreadyCreated = usersWithRecords.filter(user =>
-                    savedMonthlyEvals.some(e => e.userId === user.id && e.targetYear === year && e.targetMonth === month)
-                );
-
-                if (alreadyCreated.length > 0) {
-                    const names = alreadyCreated.map(u => u.name).join('、');
-                    if (!confirm(`以下の利用者は既に${month}月の達成度評価が作成済みです：\n${names}\n\n上書きしますか？`)) {
+                    if (usersWithRecords.length === 0) {
+                        alert(`${year}年${month}月の週評価データを持つ利用者がいません。`);
                         return;
                     }
-                }
 
-                const implementationDate = `${year}-${String(month).padStart(2, '0')}-15`;
-                const newEvals = [];
-                let aiSuccessCount = 0;
-                let aiFailCount = 0;
+                    // 既存の評価との重複チェック
+                    const alreadyCreated = usersWithRecords.filter(user =>
+                        savedMonthlyEvals.some(e => e.userId === user.id && e.targetYear === year && e.targetMonth === month)
+                    );
 
-                for (const user of usersWithRecords) {
-                    const userRecords = records.filter(r => {
-                        if (r.userId !== user.id) return false;
-                        const d = new Date(r.implementationDate);
-                        return d.getFullYear() === year && (d.getMonth() + 1) === month;
-                    }).sort((a, b) => new Date(a.implementationDate) - new Date(b.implementationDate));
+                    if (alreadyCreated.length > 0) {
+                        const names = alreadyCreated.map(u => u.name).join('、');
+                        if (!confirm(`以下の利用者は既に${month}月の達成度評価が作成済みです：\n${names}\n\n上書きしますか？`)) {
+                            return;
+                        }
+                    }
 
-                    const goalTexts = userRecords.map(r => r.goals).filter(Boolean);
-                    const workTexts = userRecords.map(r => r.workContent).filter(Boolean);
-                    const condTexts = userRecords.map(r => r.condition).filter(Boolean);
+                    const implementationDate = `${year}-${String(month).padStart(2, '0')}-15`;
+                    const newEvals = [];
+                    let aiSuccessCount = 0;
+                    let aiFailCount = 0;
 
-                    const trainingGoal = goalTexts.length > 0 ? goalTexts[goalTexts.length - 1] : '（データなし）';
-                    const activities = workTexts.length > 0 ? workTexts.join('\n') : '（データなし）';
-                    const achievement = condTexts.length > 0 ? condTexts.join('\n') : '（データなし）';
+                    for (const user of usersWithRecords) {
+                        const userRecords = records.filter(r => {
+                            if (r.userId !== user.id) return false;
+                            const d = new Date(r.implementationDate);
+                            return d.getFullYear() === year && (d.getMonth() + 1) === month;
+                        }).sort((a, b) => new Date(a.implementationDate) - new Date(b.implementationDate));
 
-                    // AI で課題・改善方針・健康面・その他・妥当性を自動生成
-                    let issues = '', improvementPlan = '', healthNotes = '', otherNotes = '', workValidity = '';
+                        const goalTexts = userRecords.map(r => r.goals).filter(Boolean);
+                        const workTexts = userRecords.map(r => r.workContent).filter(Boolean);
+                        const condTexts = userRecords.map(r => r.condition).filter(Boolean);
 
-                    if (currentKey && trainingGoal !== '（データなし）') {
-                        const baseContext = `
+                        const trainingGoal = goalTexts.length > 0 ? goalTexts[goalTexts.length - 1] : '（データなし）';
+                        const activities = workTexts.length > 0 ? workTexts.join('\n') : '（データなし）';
+                        const achievement = condTexts.length > 0 ? condTexts.join('\n') : '（データなし）';
+
+                        // AI で課題・改善方針・健康面・その他・妥当性を自動生成
+                        let issues = '', improvementPlan = '', healthNotes = '', otherNotes = '', workValidity = '';
+
+                        if (currentKey && trainingGoal !== '（データなし）') {
+                            const baseContext = `
 利用者: ${user.name}
 【訓練目標】${trainingGoal}
 【取組内容】${activities}
 【訓練目標に対する達成度】${achievement}`;
 
-                        const aiFields = [
-                            { key: 'issues', instruction: `以下の「訓練目標」「取組内容」「訓練目標に対する達成度」の内容を元に、在宅就労における「課題」を1〜2文で作成してください。支援の視点から書いてください。例：「調べ物の手順を丁寧に教え、理解を深めるよう支援する。楽しさも意識し取り組めるようにする。」` },
-                            { key: 'improvementPlan', instruction: `以下の内容を元に、「今後における課題の改善方針」を1〜2文で作成してください。段階的な支援と職員間の連携を含めてください。例：「今後は課題に対し段階的に支援を行い、職員間で連携を取りながら改善に努める。」` },
-                            { key: 'healthNotes', instruction: `以下の内容を元に、「健康・体調面での留意事項」を2〜3文で作成してください。月に一度の面会、LINEやDiscordでの連絡、電話でのフォロー、関係各所との情報共有などを含めてください。例：「最低でも月に一度は面会し健康面、体調面を把握しておく。連絡がない時はまずはLINEやDiscordで連絡し、返答がない場合は電話などで連絡する。」` },
-                            { key: 'otherNotes', instruction: `以下の内容を元に、「その他特記事項」を作成してください。特に内容がなければ「特になし」とだけ出力してください。` },
-                            { key: 'workValidity', instruction: `以下の内容を元に、「在宅就労継続の妥当性」を1〜2文で作成してください。作業状況の確認と定期的な検討について書いてください。例：「在宅での作業状況を確認し、継続の妥当性について定期的に検討していく。」` }
-                        ];
+                            const aiFields = [
+                                { key: 'issues', instruction: `以下の「訓練目標」「取組内容」「訓練目標に対する達成度」の内容を元に、在宅就労における「課題」を1〜2文で作成してください。支援の視点から書いてください。例：「調べ物の手順を丁寧に教え、理解を深めるよう支援する。楽しさも意識し取り組めるようにする。」` },
+                                { key: 'improvementPlan', instruction: `以下の内容を元に、「今後における課題の改善方針」を1〜2文で作成してください。段階的な支援と職員間の連携を含めてください。例：「今後は課題に対し段階的に支援を行い、職員間で連携を取りながら改善に努める。」` },
+                                { key: 'healthNotes', instruction: `以下の内容を元に、「健康・体調面での留意事項」を2〜3文で作成してください。月に一度の面会、LINEやDiscordでの連絡、電話でのフォロー、関係各所との情報共有などを含めてください。例：「最低でも月に一度は面会し健康面、体調面を把握しておく。連絡がない時はまずはLINEやDiscordで連絡し、返答がない場合は電話などで連絡する。」` },
+                                { key: 'otherNotes', instruction: `以下の内容を元に、「その他特記事項」を作成してください。特に内容がなければ「特になし」とだけ出力してください。` },
+                                { key: 'workValidity', instruction: `以下の内容を元に、「在宅就労継続の妥当性」を1〜2文で作成してください。作業状況の確認と定期的な検討について書いてください。例：「在宅での作業状況を確認し、継続の妥当性について定期的に検討していく。」` }
+                            ];
 
-                        for (const field of aiFields) {
-                            try {
-                                const prompt = `あなたは障害福祉サービスの就労継続支援B型の支援員です。在宅における就労達成度評価シートの記入を行っています。\n\n【指示】${field.instruction}\n福祉支援記録として適切な文章にしてください。出力はプレーンテキストのみ。`;
-                                console.log(`AI生成中: ${field.key} for ${user.name}`);
-                                const result = await generateGeminiContent(prompt, baseContext, currentKey, (s) => console.log(s));
-                                console.log(`AI生成完了: ${field.key} = ${(result || '').substring(0, 50)}...`);
-                                if (result && result.trim()) {
-                                    aiSuccessCount++;
-                                    if (field.key === 'issues') issues = result.trim();
-                                    else if (field.key === 'improvementPlan') improvementPlan = result.trim();
-                                    else if (field.key === 'healthNotes') healthNotes = result.trim();
-                                    else if (field.key === 'otherNotes') otherNotes = result.trim();
-                                    else if (field.key === 'workValidity') workValidity = result.trim();
-                                } else {
+                            for (const field of aiFields) {
+                                try {
+                                    const prompt = `あなたは障害福祉サービスの就労継続支援B型の支援員です。在宅における就労達成度評価シートの記入を行っています。\n\n【指示】${field.instruction}\n福祉支援記録として適切な文章にしてください。出力はプレーンテキストのみ。`;
+                                    console.log(`AI生成中: ${field.key} for ${user.name}`);
+                                    const result = await generateGeminiContent(prompt, baseContext, currentKey, (s) => console.log(s));
+                                    console.log(`AI生成完了: ${field.key} = ${(result || '').substring(0, 50)}...`);
+                                    if (result && result.trim()) {
+                                        aiSuccessCount++;
+                                        if (field.key === 'issues') issues = result.trim();
+                                        else if (field.key === 'improvementPlan') improvementPlan = result.trim();
+                                        else if (field.key === 'healthNotes') healthNotes = result.trim();
+                                        else if (field.key === 'otherNotes') otherNotes = result.trim();
+                                        else if (field.key === 'workValidity') workValidity = result.trim();
+                                    } else {
+                                        aiFailCount++;
+                                        console.warn(`AI生成結果が空: ${field.key}`);
+                                    }
+                                } catch (e) {
                                     aiFailCount++;
-                                    console.warn(`AI生成結果が空: ${field.key}`);
+                                    console.error(`AI generation failed for ${field.key}:`, e);
                                 }
-                            } catch (e) {
-                                aiFailCount++;
-                                console.error(`AI generation failed for ${field.key}:`, e);
                             }
+                        } else {
+                            console.warn(`AI生成スキップ: currentKey=${!!currentKey}, trainingGoal=${trainingGoal}`);
                         }
-                    } else {
-                        console.warn(`AI生成スキップ: currentKey=${!!currentKey}, trainingGoal=${trainingGoal}`);
+
+                        // 前月の評価日を検索
+                        const prevEval = savedMonthlyEvals
+                            .filter(e => e.userId === user.id && (e.targetYear < year || (e.targetYear === year && e.targetMonth < month)))
+                            .sort((a, b) => (b.targetYear * 12 + b.targetMonth) - (a.targetYear * 12 + a.targetMonth))[0];
+
+                        newEvals.push({
+                            id: generateId(),
+                            userId: user.id,
+                            targetYear: year,
+                            targetMonth: month,
+                            implementationDate: implementationDate,
+                            timeStart: '10:00',
+                            timeEnd: '10:15',
+                            method: 'commute',
+                            methodOther: '',
+                            trainingGoal,
+                            activities,
+                            achievement,
+                            issues,
+                            improvementPlan,
+                            healthNotes,
+                            otherNotes,
+                            workValidity,
+                            evaluator: '近藤恵子',
+                            previousEvalDate: prevEval ? prevEval.implementationDate : '',
+                            createdAt: new Date().toISOString()
+                        });
                     }
 
-                    // 前月の評価日を検索
-                    const prevEval = savedMonthlyEvals
-                        .filter(e => e.userId === user.id && (e.targetYear < year || (e.targetYear === year && e.targetMonth < month)))
-                        .sort((a, b) => (b.targetYear * 12 + b.targetMonth) - (a.targetYear * 12 + a.targetMonth))[0];
-
-                    newEvals.push({
-                        id: generateId(),
-                        userId: user.id,
-                        targetYear: year,
-                        targetMonth: month,
-                        implementationDate: implementationDate,
-                        timeStart: '10:00',
-                        timeEnd: '10:15',
-                        method: 'commute',
-                        methodOther: '',
-                        trainingGoal,
-                        activities,
-                        achievement,
-                        issues,
-                        improvementPlan,
-                        healthNotes,
-                        otherNotes,
-                        workValidity,
-                        evaluator: '近藤恵子',
-                        previousEvalDate: prevEval ? prevEval.implementationDate : '',
-                        createdAt: new Date().toISOString()
+                    // 既存の同月評価を除去し、新しいものを追加
+                    setSavedMonthlyEvals(prev => {
+                        const filtered = prev.filter(e => !(e.targetYear === year && e.targetMonth === month && usersWithRecords.some(u => u.id === e.userId)));
+                        return [...filtered, ...newEvals];
                     });
+
+                    const aiMsg = currentKey ? `\nAI生成: 成功${aiSuccessCount}件, 失敗${aiFailCount}件` : '\n⚠️ APIキー未設定のためAI生成はスキップされました';
+                    alert(`${usersWithRecords.length}名分の${month}月達成度評価を自動作成しました。${aiMsg}\n下の一覧からExcelダウンロードできます。`);
+                } catch (err) {
+                    console.error('一括作成エラー:', err);
+                    alert(`エラーが発生しました: ${err.message}`);
+                } finally {
+                    setBulkCreating(false);
                 }
-
-                // 既存の同月評価を除去し、新しいものを追加
-                setSavedMonthlyEvals(prev => {
-                    const filtered = prev.filter(e => !(e.targetYear === year && e.targetMonth === month && usersWithRecords.some(u => u.id === e.userId)));
-                    return [...filtered, ...newEvals];
-                });
-
-                const aiMsg = currentKey ? `\nAI生成: 成功${aiSuccessCount}件, 失敗${aiFailCount}件` : '\n⚠️ APIキー未設定のためAI生成はスキップされました';
-                alert(`${usersWithRecords.length}名分の${month}月達成度評価を自動作成しました。${aiMsg}\n下の一覧からExcelダウンロードできます。`);
             };
 
             // --- 保存済み月次評価を個別Excel出力 ---
@@ -2552,9 +2562,10 @@ ${text}`;
                                     </p>
                                     <button
                                         onClick={autoCreateAllMonthlyEvaluations}
-                                        className="btn bg-amber-500 text-white hover:bg-amber-600 px-8 py-3 shadow-lg transform hover:-translate-y-1 transition text-base font-bold"
+                                        disabled={bulkCreating}
+                                        className={`btn px-8 py-3 shadow-lg transform hover:-translate-y-1 transition text-base font-bold ${bulkCreating ? 'bg-gray-400 cursor-not-allowed' : 'bg-amber-500 text-white hover:bg-amber-600'}`}
                                     >
-                                        🚀 全利用者の達成度評価を自動作成
+                                        {bulkCreating ? <span className="loading-dots">📝 AI生成中…お待ちください</span> : '🚀 全利用者の達成度評価を自動作成'}
                                     </button>
                                 </div>
 

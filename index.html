@@ -574,11 +574,11 @@
 【訓練目標に対する達成度】${achievement}`;
 
                         const aiFields = [
-                            { key: 'issues', instruction: `以下の「訓練目標」「取組内容」「訓練目標に対する達成度」の内容を元に、在宅就労における「課題」を2〜3文で作成してください。` },
-                            { key: 'improvementPlan', instruction: `以下の内容を元に、「今後における課題の改善方針」を2〜3文で作成してください。具体的な支援方法を含めてください。` },
-                            { key: 'healthNotes', instruction: `以下の内容を元に、「健康・体調面での留意事項」を2〜3文で作成してください。体調管理や連絡方法の観点を含めてください。` },
-                            { key: 'otherNotes', instruction: `以下の内容を元に、「その他特記事項」を1〜2文で簡潔に作成してください。` },
-                            { key: 'workValidity', instruction: `以下の内容を元に、「在宅就労継続の妥当性」を2〜3文で作成してください。在宅での就労を継続することの妥当性を評価してください。` }
+                            { key: 'issues', instruction: `以下の「訓練目標」「取組内容」「訓練目標に対する達成度」の内容を元に、在宅就労における「課題」を1〜2文で作成してください。支援の視点から書いてください。例：「調べ物の手順を丁寧に教え、理解を深めるよう支援する。楽しさも意識し取り組めるようにする。」` },
+                            { key: 'improvementPlan', instruction: `以下の内容を元に、「今後における課題の改善方針」を1〜2文で作成してください。段階的な支援と職員間の連携を含めてください。例：「今後は課題に対し段階的に支援を行い、職員間で連携を取りながら改善に努める。」` },
+                            { key: 'healthNotes', instruction: `以下の内容を元に、「健康・体調面での留意事項」を2〜3文で作成してください。月に一度の面会、LINEやDiscordでの連絡、電話でのフォロー、関係各所との情報共有などを含めてください。例：「最低でも月に一度は面会し健康面、体調面を把握しておく。連絡がない時はまずはLINEやDiscordで連絡し、返答がない場合は電話などで連絡する。」` },
+                            { key: 'otherNotes', instruction: `以下の内容を元に、「その他特記事項」を作成してください。特に内容がなければ「特になし」とだけ出力してください。` },
+                            { key: 'workValidity', instruction: `以下の内容を元に、「在宅就労継続の妥当性」を1〜2文で作成してください。作業状況の確認と定期的な検討について書いてください。例：「在宅での作業状況を確認し、継続の妥当性について定期的に検討していく。」` }
                         ];
 
                         for (const field of aiFields) {
@@ -1690,9 +1690,16 @@ ${text}`;
                     ['在宅就労継続の妥当性', d.workValidity || '', '', '', '', '', '', '', ''],
                     ['', '', '', '', '', '', '', '', ''],
                     // 行26: 評価実施者
-                    ['評価実施者', d.evaluator || '', '', '', '前回実施日', d.previousEvalDate ? getFormattedDate(d.previousEvalDate) : '', '', getFormattedDate(d.implementationDate), ''],
+                    (() => {
+                        // 前回の達成度評価日を令和形式で表示
+                        const prevDate = d.previousEvalDate ? new Date(d.previousEvalDate) : null;
+                        const prevReiwa = prevDate ? `令和${prevDate.getFullYear() - 2018}` : '';
+                        const prevMonth = prevDate ? `${prevDate.getMonth() + 1}月` : '';
+                        const prevDay = prevDate ? `${prevDate.getDate()}日` : '';
+                        return ['評価実施者', d.evaluator || '', '', '前回の達成度評価日', '', prevReiwa, '年', prevMonth, prevDay];
+                    })(),
                     // 行27: 確認文
-                    ['上記内容を確認し、評価実施者と共有しました', '', '', '', '', '', '', '', ''],
+                    ['上記内容を確認し、評価実施者と共有しました。', '', '', '', '', '', '', '', ''],
                     // 行28: 対象者署名欄（空白にして記入できるようにする）
                     ['', '', '', '対象者署名', '', '', '', '', ''],
                     // 行29: 注意書き
@@ -1784,14 +1791,13 @@ ${text}`;
                     { s: { r: 22, c: 1 }, e: { r: 23, c: 8 } }, // その他
                     { s: { r: 24, c: 1 }, e: { r: 25, c: 8 } }, // 妥当性
                     // 評価実施者
-                    { s: { r: 26, c: 1 }, e: { r: 26, c: 3 } },
-                    { s: { r: 26, c: 5 }, e: { r: 26, c: 6 } }, // 前回実施日
+                    { s: { r: 26, c: 1 }, e: { r: 26, c: 2 } }, // 名前 B-C
+                    { s: { r: 26, c: 3 }, e: { r: 26, c: 4 } }, // 前回の達成度評価日ラベル D-E
                     // 確認文
                     { s: { r: 27, c: 0 }, e: { r: 27, c: 8 } },
                     // 対象者署名欄
-                    { s: { r: 28, c: 0 }, e: { r: 28, c: 2 } }, // 署名スペース（空白）
-                    { s: { r: 28, c: 3 }, e: { r: 28, c: 5 } }, // 対象者署名ラベル
-                    { s: { r: 28, c: 6 }, e: { r: 28, c: 8 } }, // 空白
+                    { s: { r: 28, c: 0 }, e: { r: 28, c: 2 } }, // 空白
+                    { s: { r: 28, c: 3 }, e: { r: 28, c: 8 } }, // 対象者署名 + 署名スペース
                     // 注意書き
                     { s: { r: 29, c: 6 }, e: { r: 29, c: 8 } },
                 ];
@@ -1839,14 +1845,25 @@ ${text}`;
                     }
                 }
 
-                // 対象者署名欄（空白にして記入できるようにする）
-                setStyle(28, 0, { font: bodyFont, alignment: centerAlign, border: allBorders });
-                setStyle(28, 3, { font: { sz: 9, name: 'ＭＳ Ｐゴシック' }, alignment: centerAlign, border: allBorders });
-                setStyle(28, 6, { font: bodyFont, alignment: centerAlign, border: allBorders });
+                // 行26: 評価実施者行のスタイル
+                setStyle(26, 0, { font: headerFont, alignment: centerAlign, border: allBorders });
+                setStyle(26, 1, { font: bodyFont, alignment: centerAlign, border: allBorders });
+                setStyle(26, 3, { font: { sz: 9, name: 'ＭＳ Ｐゴシック' }, alignment: centerAlign, border: allBorders });
+                // 令和X年X月X日 の各セル
+                for (let c = 5; c <= 8; c++) {
+                    setStyle(26, c, { font: bodyFont, alignment: centerAlign, border: allBorders });
+                }
 
-                // 注意書き行
+                // 行27: 確認文（大きめのフォント）
+                setStyle(27, 0, { font: { bold: true, sz: 12, name: 'ＭＳ Ｐゴシック' }, alignment: { horizontal: 'center', vertical: 'center' }, border: {} });
+
+                // 行28: 対象者署名欄（下線付き）
+                setStyle(28, 0, { font: bodyFont, alignment: centerAlign, border: {} });
+                setStyle(28, 3, { font: bodyFont, alignment: { horizontal: 'center', vertical: 'bottom' }, border: { bottom: thinBorder } });
+
+                // 行29: 注意書き
+                for (let c = 0; c <= 8; c++) setStyle(29, c, { border: {} });
                 setStyle(29, 6, { font: noteFont, alignment: { horizontal: 'left', vertical: 'center' }, border: {} });
-                for (let c = 0; c <= 5; c++) setStyle(29, c, { border: {} });
 
                 return ws;
             };

@@ -1804,9 +1804,8 @@ ${text}`;
                     // 確認文
                     { s: { r: 27, c: 0 }, e: { r: 27, c: 8 } },
                     // 対象者署名欄
-                    { s: { r: 28, c: 0 }, e: { r: 28, c: 2 } }, // 空白
                     { s: { r: 28, c: 3 }, e: { r: 28, c: 4 } }, // 対象者署名ラベル
-                    { s: { r: 28, c: 5 }, e: { r: 28, c: 8 } }, // 署名記入欄（下線付き）
+                    { s: { r: 28, c: 5 }, e: { r: 28, c: 8 } }, // 署名記入欄
                 ];
 
                 // スタイル適用
@@ -1841,9 +1840,9 @@ ${text}`;
                     setStyle(r, 0, { font: headerFont, alignment: centerAlign, fill: { fgColor: { rgb: "FFFFFF" } } });
                 });
 
-                // 左寄せにするセル（テキストが入る部分）
+                // 左寄せ・縦中央にするセル（テキストが入る部分）
                 [5, 8, 11, 14, 17, 20, 22, 24].forEach(r => {
-                    setStyle(r, 1, { font: bodyFont, alignment: topLeftAlign, wrapText: true });
+                    setStyle(r, 1, { font: bodyFont, alignment: leftAlign, wrapText: true });
                 });
 
                 // チェックボックスのフォントサイズ調整
@@ -1866,10 +1865,10 @@ ${text}`;
                 // 行27: 確認文（大きめのフォント、枠線付き）
                 setStyle(27, 0, { font: { bold: true, sz: 12, name: 'ＭＳ Ｐゴシック' }, alignment: { horizontal: 'center', vertical: 'center' }, border: allBorders });
 
-                // 行28: 対象者署名欄（枠線付き）
-                setStyle(28, 0, { font: bodyFont, alignment: centerAlign, border: allBorders });
+                // 行28: 対象者署名欄
+                for (let c = 0; c <= 2; c++) setStyle(28, c, { border: {} }); // A-Cは空白・枠なし
                 setStyle(28, 3, { font: bodyFont, alignment: { horizontal: 'center', vertical: 'center' }, border: allBorders });
-                setStyle(28, 5, { font: bodyFont, alignment: centerAlign, border: { bottom: thinBorder, top: thinBorder, left: thinBorder, right: thinBorder } });
+                setStyle(28, 5, { font: bodyFont, alignment: centerAlign, border: allBorders });
 
                 return ws;
             };

@@ -676,7 +676,8 @@
                     alert(`${usersWithRecords.length}名分の${month}月達成度評価を自動作成しました。${aiMsg}\n下の一覧からExcelダウンロードできます。`);
                 } catch (err) {
                     console.error('一括作成エラー:', err);
-                    alert(`エラーが発生しました: ${err.message}`);
+                    const errorDetail = `エラー種類: ${err.name || 'N/A'}\nメッセージ: ${err.message || 'N/A'}\nスタック: ${(err.stack || '').split('\n').slice(0, 3).join('\n')}`;
+                    alert(`エラーが発生しました:\n\n${errorDetail}`);
                 } finally {
                     setBulkCreating(false);
                 }

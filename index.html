@@ -517,9 +517,28 @@
             const autoCreateAllMonthlyEvaluations = async () => {
                 const year = monthlyFormData.targetYear;
                 const month = monthlyFormData.targetMonth;
-                const currentKey = apiKey || MANUAL_API_KEY;
+                let currentKey = apiKey || MANUAL_API_KEY;
 
-                // APIキーチェック
+                // APIキーがない場合、Supabaseから直接取得を試みる
+                if (!currentKey) {
+                    try {
+                        console.log('APIキーをSupabaseから取得中...');
+                        const { data, error } = await supabase
+                            .from('api_keys')
+                            .select('value')
+                            .eq('key', 'gemini_api_key')
+                            .single();
+                        if (!error && data && data.value) {
+                            currentKey = data.value;
+                            setApiKey(data.value);
+                            localStorage.setItem('sw_api_key', data.value);
+                            console.log('APIキーをSupabaseから取得しました');
+                        }
+                    } catch (e) {
+                        console.error('APIキー取得失敗:', e);
+                    }
+                }
+
                 if (!currentKey) {
                     alert('⚠️ APIキーが設定されていません。AI自動生成ができないため、課題・改善方針等の欄は空白になります。\n\n設定画面でAPIキーを確認してください。');
                 }

@@ -1653,7 +1653,7 @@ ${text}`;
                     // 行0: タイトル
                     ['在宅における就労達成度評価シート', '', '', '', '', '', `令和${d.targetYear - 2018}年${d.targetMonth}月分`, '', ''],
                     // 行1: 対象者情報
-                    ['対象者名', user.name, '', '', '', '受給者証番号', user.number || '', '', ''],
+                    ['対象者名', user.name, '', '', '', '受給\n者証', user.number || '', '', ''],
                     // 行2: 実施日
                     ['実施日', `${d.targetYear}年${d.targetMonth}月${new Date(d.implementationDate).getDate()}日`, '', '', '実施時間', `${d.timeStart} ～ ${d.timeEnd}`, '', '', ''],
                     // 行3: 実施方法ヘッダー
@@ -1693,10 +1693,10 @@ ${text}`;
                     (() => {
                         // 前回の達成度評価日を令和形式で表示
                         const prevDate = d.previousEvalDate ? new Date(d.previousEvalDate) : null;
-                        const prevReiwa = prevDate ? `令和${prevDate.getFullYear() - 2018}` : '';
+                        const prevYear = prevDate ? `${prevDate.getFullYear() - 2018}年` : '';
                         const prevMonth = prevDate ? `${prevDate.getMonth() + 1}月` : '';
                         const prevDay = prevDate ? `${prevDate.getDate()}日` : '';
-                        return ['評価実施者', d.evaluator || '', '', '前回の達成度評価日', '', prevReiwa, '年', prevMonth, prevDay];
+                        return ['評価実施者', d.evaluator || '', '', '前回の達成度評価日', '', '令和', prevYear, prevMonth, prevDay];
                     })(),
                     // 行27: 確認文
                     ['上記内容を確認し、評価実施者と共有しました。', '', '', '', '', '', '', '', ''],
@@ -1821,8 +1821,10 @@ ${text}`;
                 // 令和X年X月分 → 真ん中に配置
                 setStyle(0, 6, { font: { sz: 11, name: 'ＭＳ Ｐゴシック' }, alignment: { horizontal: 'center', vertical: 'center' }, border: { bottom: thinBorder } });
 
-                // 受給者証番号 → 枠に収まるサイズに変更
-                setStyle(1, 6, { font: { sz: 8, name: 'ＭＳ Ｐゴシック' }, alignment: { horizontal: 'center', vertical: 'center' }, border: allBorders });
+                // 受給者証ラベル → 小さいフォント
+                setStyle(1, 5, { font: { sz: 7, name: 'ＭＳ Ｐゴシック' }, alignment: { horizontal: 'center', vertical: 'center', wrapText: true }, border: allBorders });
+                // 受給者証番号 → 少し大きめのフォント
+                setStyle(1, 6, { font: { sz: 10, name: 'ＭＳ Ｐゴシック' }, alignment: { horizontal: 'center', vertical: 'center' }, border: allBorders });
 
                 // 実施時間 → 真ん中に配置
                 setStyle(2, 5, { font: bodyFont, alignment: { horizontal: 'center', vertical: 'center' }, border: allBorders });

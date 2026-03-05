@@ -517,6 +517,7 @@
             const autoCreateAllMonthlyEvaluations = async () => {
                 const year = monthlyFormData.targetYear;
                 const month = monthlyFormData.targetMonth;
+                const currentKey = apiKey || MANUAL_API_KEY;
 
                 // 対象月の週評価データがある利用者を取得
                 const usersWithRecords = users.filter(user => {
@@ -558,6 +559,43 @@
                     const workTexts = userRecords.map(r => r.workContent).filter(Boolean);
                     const condTexts = userRecords.map(r => r.condition).filter(Boolean);
 
+                    const trainingGoal = goalTexts.length > 0 ? goalTexts[goalTexts.length - 1] : '（データなし）';
+                    const activities = workTexts.length > 0 ? workTexts.join('\n') : '（データなし）';
+                    const achievement = condTexts.length > 0 ? condTexts.join('\n') : '（データなし）';
+
+                    // AI で課題・改善方針・健康面・その他・妥当性を自動生成
+                    let issues = '', improvementPlan = '', healthNotes = '', otherNotes = '', workValidity = '';
+
+                    if (currentKey && trainingGoal !== '（データなし）') {
+                        const baseContext = `
+利用者: ${user.name}
+【訓練目標】${trainingGoal}
+【取組内容】${activities}
+【訓練目標に対する達成度】${achievement}`;
+
+                        const aiFields = [
+                            { key: 'issues', instruction: `以下の「訓練目標」「取組内容」「訓練目標に対する達成度」の内容を元に、在宅就労における「課題」を2〜3文で作成してください。` },
+                            { key: 'improvementPlan', instruction: `以下の内容を元に、「今後における課題の改善方針」を2〜3文で作成してください。具体的な支援方法を含めてください。` },
+                            { key: 'healthNotes', instruction: `以下の内容を元に、「健康・体調面での留意事項」を2〜3文で作成してください。体調管理や連絡方法の観点を含めてください。` },
+                            { key: 'otherNotes', instruction: `以下の内容を元に、「その他特記事項」を1〜2文で簡潔に作成してください。` },
+                            { key: 'workValidity', instruction: `以下の内容を元に、「在宅就労継続の妥当性」を2〜3文で作成してください。在宅での就労を継続することの妥当性を評価してください。` }
+                        ];
+
+                        for (const field of aiFields) {
+                            try {
+                                const prompt = `あなたは障害福祉サービスの就労継続支援B型の支援員です。在宅における就労達成度評価シートの記入を行っています。\n\n【指示】${field.instruction}\n福祉支援記録として適切な「です・ます」調の文章にしてください。出力はプレーンテキストのみ。\n${baseContext}`;
+                                const result = await generateGeminiContent(prompt, '', currentKey, null).catch(() => '');
+                                if (field.key === 'issues') issues = (result || '').trim();
+                                else if (field.key === 'improvementPlan') improvementPlan = (result || '').trim();
+                                else if (field.key === 'healthNotes') healthNotes = (result || '').trim();
+                                else if (field.key === 'otherNotes') otherNotes = (result || '').trim();
+                                else if (field.key === 'workValidity') workValidity = (result || '').trim();
+                            } catch (e) {
+                                console.warn(`AI generation failed for ${field.key}:`, e);
+                            }
+                        }
+                    }
+
                     // 前月の評価日を検索
                     const prevEval = savedMonthlyEvals
                         .filter(e => e.userId === user.id && (e.targetYear < year || (e.targetYear === year && e.targetMonth < month)))
@@ -573,14 +611,14 @@
                         timeEnd: '10:15',
                         method: 'commute',
                         methodOther: '',
-                        trainingGoal: goalTexts.length > 0 ? goalTexts[goalTexts.length - 1] : '（データなし）',
-                        activities: workTexts.length > 0 ? workTexts.join('\n') : '（データなし）',
-                        achievement: condTexts.length > 0 ? condTexts.join('\n') : '（データなし）',
-                        issues: '',
-                        improvementPlan: '',
-                        healthNotes: '',
-                        otherNotes: '',
-                        workValidity: '',
+                        trainingGoal,
+                        activities,
+                        achievement,
+                        issues,
+                        improvementPlan,
+                        healthNotes,
+                        otherNotes,
+                        workValidity,
                         evaluator: '近藤恵子',
                         previousEvalDate: prevEval ? prevEval.implementationDate : '',
                         createdAt: new Date().toISOString()
@@ -1649,14 +1687,16 @@ ${text}`;
                     ['その他特記事項', d.otherNotes || '', '', '', '', '', '', '', ''],
                     ['', '', '', '', '', '', '', '', ''],
                     // 行24-25: 妥当性
-                    ['在宅労務継続の妥当性', d.workValidity || '', '', '', '', '', '', '', ''],
+                    ['在宅就労継続の妥当性', d.workValidity || '', '', '', '', '', '', '', ''],
                     ['', '', '', '', '', '', '', '', ''],
                     // 行26: 評価実施者
                     ['評価実施者', d.evaluator || '', '', '', '前回実施日', d.previousEvalDate ? getFormattedDate(d.previousEvalDate) : '', '', getFormattedDate(d.implementationDate), ''],
                     // 行27: 確認文
                     ['上記内容を確認し、評価実施者と共有しました', '', '', '', '', '', '', '', ''],
-                    // 行28: 署名欄
-                    ['', '', '', '対象者署名', '', '', '・はサービス管理責任者が必ず確認すること', '', '']
+                    // 行28: 対象者署名欄（空白にして記入できるようにする）
+                    ['', '', '', '対象者署名', '', '', '', '', ''],
+                    // 行29: 注意書き
+                    ['', '', '', '', '', '', '・はサービス管理責任者が必ず確認すること', '', '']
                 ];
 
                 const ws = XLSX.utils.aoa_to_sheet(data);
@@ -1705,7 +1745,8 @@ ${text}`;
 
                 ws['!rows'][26] = { hpt: 25 }; // 実施者
                 ws['!rows'][27] = { hpt: 25 }; // 確認文
-                ws['!rows'][28] = { hpt: 40 }; // 署名欄
+                ws['!rows'][28] = { hpt: 40 }; // 対象者署名欄
+                ws['!rows'][29] = { hpt: 18 }; // 注意書き
 
                 // 列幅設定
                 ws['!cols'] = [
@@ -1747,9 +1788,12 @@ ${text}`;
                     { s: { r: 26, c: 5 }, e: { r: 26, c: 6 } }, // 前回実施日
                     // 確認文
                     { s: { r: 27, c: 0 }, e: { r: 27, c: 8 } },
-                    // 署名
-                    { s: { r: 28, c: 3 }, e: { r: 28, c: 5 } },
-                    { s: { r: 28, c: 6 }, e: { r: 28, c: 8 } },
+                    // 対象者署名欄
+                    { s: { r: 28, c: 0 }, e: { r: 28, c: 2 } }, // 署名スペース（空白）
+                    { s: { r: 28, c: 3 }, e: { r: 28, c: 5 } }, // 対象者署名ラベル
+                    { s: { r: 28, c: 6 }, e: { r: 28, c: 8 } }, // 空白
+                    // 注意書き
+                    { s: { r: 29, c: 6 }, e: { r: 29, c: 8 } },
                 ];
 
                 // スタイル適用
@@ -1766,21 +1810,26 @@ ${text}`;
                 // タイトル
                 const setStyle = (r, c, s) => { const addr = XLSX.utils.encode_cell({ r, c }); if (ws[addr]) ws[addr].s = { ...ws[addr].s, ...s }; };
 
+                // タイトル行
                 setStyle(0, 0, { font: titleFont, border: { bottom: thinBorder } });
-                setStyle(0, 6, { font: { sz: 11, name: 'ＭＳ Ｐゴシック' }, alignment: { horizontal: 'right', vertical: 'bottom' }, border: { bottom: thinBorder } });
+                // 令和X年X月分 → 真ん中に配置
+                setStyle(0, 6, { font: { sz: 11, name: 'ＭＳ Ｐゴシック' }, alignment: { horizontal: 'center', vertical: 'center' }, border: { bottom: thinBorder } });
 
-                // ヘッダー項目（背景あり・左寄せなど）
+                // 受給者証番号 → 枠に収まるサイズに変更
+                setStyle(1, 6, { font: { sz: 8, name: 'ＭＳ Ｐゴシック' }, alignment: { horizontal: 'center', vertical: 'center' }, border: allBorders });
+
+                // 実施時間 → 真ん中に配置
+                setStyle(2, 5, { font: bodyFont, alignment: { horizontal: 'center', vertical: 'center' }, border: allBorders });
+
+                // ヘッダー項目
                 [5, 8, 11, 14, 17, 20, 22, 24].forEach(r => {
-                    setStyle(r, 0, { font: headerFont, alignment: centerAlign, fill: { fgColor: { rgb: "FFFFFF" } } }); // 今回は白背景にします（画像1が不明なためシンプルに）
+                    setStyle(r, 0, { font: headerFont, alignment: centerAlign, fill: { fgColor: { rgb: "FFFFFF" } } });
                 });
 
                 // 左寄せにするセル（テキストが入る部分）
                 [5, 8, 11, 14, 17, 20, 22, 24].forEach(r => {
                     setStyle(r, 1, { font: bodyFont, alignment: topLeftAlign, wrapText: true });
                 });
-
-                // 方法欄のレイアウト調整
-                // isMethodを使って値を配置する必要がありますが、今回は文字列で代用した箇所を修正
 
                 // チェックボックスのフォントサイズ調整
                 for (let r = 3; r <= 4; r++) {
@@ -1789,6 +1838,15 @@ ${text}`;
                         if (ws[addr]) ws[addr].s = { ...ws[addr].s, font: { sz: 12, name: 'ＭＳ Ｐゴシック' }, alignment: centerAlign };
                     }
                 }
+
+                // 対象者署名欄（空白にして記入できるようにする）
+                setStyle(28, 0, { font: bodyFont, alignment: centerAlign, border: allBorders });
+                setStyle(28, 3, { font: { sz: 9, name: 'ＭＳ Ｐゴシック' }, alignment: centerAlign, border: allBorders });
+                setStyle(28, 6, { font: bodyFont, alignment: centerAlign, border: allBorders });
+
+                // 注意書き行
+                setStyle(29, 6, { font: noteFont, alignment: { horizontal: 'left', vertical: 'center' }, border: {} });
+                for (let c = 0; c <= 5; c++) setStyle(29, c, { border: {} });
 
                 return ws;
             };

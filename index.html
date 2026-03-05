@@ -1780,7 +1780,16 @@ ${text}`;
                     { s: { r: 2, c: 5 }, e: { r: 2, c: 8 } }, // 時間
                     // 方法
                     { s: { r: 3, c: 0 }, e: { r: 4, c: 0 } }, // ラベル
-                    // 各項目の大きな結合
+                    // 各項目のラベル列（A列）の結合
+                    { s: { r: 5, c: 0 }, e: { r: 7, c: 0 } },   // 訓練目標
+                    { s: { r: 8, c: 0 }, e: { r: 10, c: 0 } },  // 取組内容
+                    { s: { r: 11, c: 0 }, e: { r: 13, c: 0 } }, // 達成度
+                    { s: { r: 14, c: 0 }, e: { r: 16, c: 0 } }, // 課題
+                    { s: { r: 17, c: 0 }, e: { r: 19, c: 0 } }, // 改善方針
+                    { s: { r: 20, c: 0 }, e: { r: 21, c: 0 } }, // 健康面
+                    { s: { r: 22, c: 0 }, e: { r: 23, c: 0 } }, // その他
+                    { s: { r: 24, c: 0 }, e: { r: 25, c: 0 } }, // 妥当性
+                    // 各項目の内容列（B-I列）の結合
                     { s: { r: 5, c: 1 }, e: { r: 7, c: 8 } }, // 訓練目標
                     { s: { r: 8, c: 1 }, e: { r: 10, c: 8 } }, // 取組内容
                     { s: { r: 11, c: 1 }, e: { r: 13, c: 8 } }, // 達成度
@@ -1854,13 +1863,13 @@ ${text}`;
                     setStyle(26, c, { font: bodyFont, alignment: centerAlign, border: allBorders });
                 }
 
-                // 行27: 確認文（大きめのフォント）
-                setStyle(27, 0, { font: { bold: true, sz: 12, name: 'ＭＳ Ｐゴシック' }, alignment: { horizontal: 'center', vertical: 'center' }, border: {} });
+                // 行27: 確認文（大きめのフォント、枠線付き）
+                setStyle(27, 0, { font: { bold: true, sz: 12, name: 'ＭＳ Ｐゴシック' }, alignment: { horizontal: 'center', vertical: 'center' }, border: allBorders });
 
-                // 行28: 対象者署名欄
-                setStyle(28, 0, { font: bodyFont, alignment: centerAlign, border: {} });
+                // 行28: 対象者署名欄（枠線付き）
+                setStyle(28, 0, { font: bodyFont, alignment: centerAlign, border: allBorders });
                 setStyle(28, 3, { font: bodyFont, alignment: { horizontal: 'center', vertical: 'center' }, border: allBorders });
-                setStyle(28, 5, { font: bodyFont, alignment: centerAlign, border: { bottom: thinBorder } });
+                setStyle(28, 5, { font: bodyFont, alignment: centerAlign, border: { bottom: thinBorder, top: thinBorder, left: thinBorder, right: thinBorder } });
 
                 return ws;
             };

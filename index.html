@@ -495,10 +495,12 @@
             });
             const [monthlyLoading, setMonthlyLoading] = useState({});
 
-            // --- 週評価 自動作成用 State ---
+            // --- 週評価 一括自動作成用 State ---
             const [autoCreatePopup, setAutoCreatePopup] = useState(null);
             // { targetDate: 'YYYY-MM-DD', targetUsers: [...], periodStart: '...', periodEnd: '...' }
             const [autoCreateLoading, setAutoCreateLoading] = useState(false);
+            const [autoCreateTargetDate, setAutoCreateTargetDate] = useState(new Date().toISOString().split('T')[0]);
+            const [autoCreateProgress, setAutoCreateProgress] = useState(''); // 進捗メッセージ
 
             // --- 保存済み月次評価データ ---
             const [savedMonthlyEvals, setSavedMonthlyEvals] = useState(() => {
@@ -710,64 +712,66 @@
             useEffect(() => { localStorage.setItem('sw_users', JSON.stringify(users)); }, [users]);
             useEffect(() => { localStorage.setItem('sw_records', JSON.stringify(records)); }, [records]);
 
-            // --- 月曜日 自動作成チェック ---
-            useEffect(() => {
-                if (records.length === 0 || users.length === 0) return;
+            // --- 週評価 一括自動作成: 対象利用者を算出 ---
+            const prepareAutoCreate = () => {
+                const targetDate = autoCreateTargetDate;
+                if (!targetDate) { alert('実施日を選択してください'); return; }
 
-                const today = new Date();
-                const dayOfWeek = today.getDay(); // 0=日, 1=月
-
-                // 月曜日でなければ何もしない
-                if (dayOfWeek !== 1) return;
-
-                // 今日の日付キーで既にポップアップを表示/スキップ済みか確認
-                const todayStr = today.toISOString().split('T')[0];
-                const dismissedKey = `sw_auto_create_dismissed_${todayStr}`;
-                if (localStorage.getItem(dismissedKey)) return;
-
-                // 対象期間を計算（先週月曜日〜日曜日）
-                const lastMon = new Date(today);
-                lastMon.setDate(today.getDate() - 7);
+                // 対象期間を計算（実施日を基準に前週の月〜日）
+                const implDateObj = new Date(targetDate);
+                const day = implDateObj.getDay();
+                const diffToMon = (day === 0 ? -6 : 1) - day;
+                const thisMon = new Date(implDateObj);
+                thisMon.setDate(implDateObj.getDate() + diffToMon);
+                const lastMon = new Date(thisMon);
+                lastMon.setDate(thisMon.getDate() - 7);
                 const lastSun = new Date(lastMon);
                 lastSun.setDate(lastMon.getDate() + 6);
                 const periodStart = lastMon.toISOString().split('T')[0];
                 const periodEnd = lastSun.toISOString().split('T')[0];
 
-                // 各利用者で、記録が1件以上あり、かつ今週分がまだない利用者を抽出
+                // 各利用者で、記録が1件以上あり、かつ対象期間の記録がまだない利用者を抽出
                 const targetUsers = users.filter(user => {
                     const userRecords = records.filter(r => r.userId === user.id);
                     if (userRecords.length === 0) return false;
-                    // 同じ対象期間の記録が既にあるかチェック
                     const alreadyExists = userRecords.some(r => r.periodStart === periodStart && r.periodEnd === periodEnd);
                     return !alreadyExists;
                 });
 
-                if (targetUsers.length === 0) return;
+                if (targetUsers.length === 0) {
+                    alert('対象となる利用者がいません。\n（全利用者の週評価が既に作成済み、または記録が1件もありません）');
+                    return;
+                }
 
-                setAutoCreatePopup({
-                    targetDate: todayStr,
-                    targetUsers,
-                    periodStart,
-                    periodEnd
-                });
-            }, [records, users]);
+                setAutoCreatePopup({ targetDate, targetUsers, periodStart, periodEnd });
+            };
 
-            // --- 週評価 自動作成関数（AI言い回し変換付き） ---
+            // --- 週評価 一括自動作成 実行（AI言い回し変換付き） ---
             const autoCreateWeeklyRecords = async () => {
                 if (!autoCreatePopup) return;
                 const currentKey = apiKey || MANUAL_API_KEY;
 
                 setAutoCreateLoading(true);
+                setAutoCreateProgress('');
                 const { targetDate, targetUsers, periodStart, periodEnd } = autoCreatePopup;
                 const newRecords = [];
 
-                for (const user of targetUsers) {
+                for (let i = 0; i < targetUsers.length; i++) {
+                    const user = targetUsers[i];
+                    setAutoCreateProgress(`${user.name} さんの記録を作成中... (${i + 1}/${targetUsers.length})`);
+
                     // 最新の記録を取得
                     const userRecords = records
                         .filter(r => r.userId === user.id)
                         .sort((a, b) => new Date(b.implementationDate) - new Date(a.implementationDate));
                     const latest = userRecords[0];
                     if (!latest) continue;
+
+                    // 前回実施日を計算
+                    const prevRecords = records
+                        .filter(r => r.userId === user.id && new Date(r.implementationDate) < new Date(targetDate))
+                        .sort((a, b) => new Date(b.implementationDate) - new Date(a.implementationDate));
+                    const previousDate = prevRecords.length > 0 ? prevRecords[0].implementationDate : latest.implementationDate;
 
                     // AI で言い回しを変える
                     let newCondition = latest.condition || '';
@@ -802,7 +806,7 @@ ${text}`;
                             newWorkContent = (w || '').trim() || latest.workContent;
                             newGoals = (g || '').trim() || latest.goals;
                         } catch (e) {
-                            console.warn('AI rephrasing failed, using original text:', e);
+                            console.warn('AI rephrasing failed for ' + user.name + ', using original text:', e);
                         }
                     }
 
@@ -810,7 +814,7 @@ ${text}`;
                         id: generateId(),
                         userId: user.id,
                         implementationDate: targetDate,
-                        previousDate: latest.implementationDate,
+                        previousDate,
                         periodStart,
                         periodEnd,
                         selectedMethod: latest.selectedMethod || 'commute',
@@ -824,22 +828,19 @@ ${text}`;
                 }
 
                 // 保存
+                setAutoCreateProgress('クラウドに保存中...');
                 for (const rec of newRecords) {
                     await saveRecordToSupabase(rec);
                 }
                 setRecords(prev => [...newRecords, ...prev]);
 
-                // ポップアップを閉じ、今日は再表示しない
-                localStorage.setItem(`sw_auto_create_dismissed_${targetDate}`, 'done');
                 setAutoCreatePopup(null);
                 setAutoCreateLoading(false);
+                setAutoCreateProgress('');
                 alert(`${newRecords.length}名分の週評価を自動作成しました。`);
             };
 
             const dismissAutoCreate = () => {
-                if (autoCreatePopup) {
-                    localStorage.setItem(`sw_auto_create_dismissed_${autoCreatePopup.targetDate}`, 'skipped');
-                }
                 setAutoCreatePopup(null);
             };
 
@@ -1833,7 +1834,7 @@ ${text}`;
                                 {autoCreateLoading ? (
                                     <div style={{ textAlign: 'center', padding: '1rem' }}>
                                         <div style={{ display: 'inline-block', width: '2rem', height: '2rem', border: '3px solid #e5e7eb', borderTop: '3px solid #10b981', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
-                                        <p style={{ color: '#6b7280', marginTop: '0.75rem', fontSize: '0.9rem' }}>AIで文章を生成中...</p>
+                                        <p style={{ color: '#6b7280', marginTop: '0.75rem', fontSize: '0.9rem' }}>{autoCreateProgress || 'AIで文章を生成中...'}</p>
                                     </div>
                                 ) : (
                                     <div style={{ display: 'flex', gap: '0.75rem' }}>
@@ -2080,6 +2081,48 @@ ${text}`;
                                     <span className="bg-yellow-500 w-2 h-8 rounded-full inline-block"></span>
                                     記録一覧・帳票出力
                                 </h2>
+
+                                {/* 週評価 一括自動作成 */}
+                                <div className="glass p-6 rounded-xl border-l-4 border-indigo-500">
+                                    <h3 className="font-bold text-indigo-700 mb-3 flex items-center gap-2">
+                                        🤖 週評価の一括自動作成（AI言い回し変換）
+                                    </h3>
+                                    <p className="text-sm text-gray-500 mb-4">
+                                        過去の記録がある全利用者について、前回の記録をもとにAIが言い回しを変えた新しい週評価を一括作成します。
+                                    </p>
+                                    <div className="flex gap-4 items-end flex-wrap">
+                                        <div>
+                                            <label className="block text-sm font-bold text-gray-600 mb-1">実施日</label>
+                                            <input type="date" className="input-field" value={autoCreateTargetDate}
+                                                onChange={e => setAutoCreateTargetDate(e.target.value)} />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-bold text-gray-600 mb-1">対象期間 (自動計算)</label>
+                                            <div className="input-field bg-gray-100 text-gray-500 text-sm">
+                                                {(() => {
+                                                    if (!autoCreateTargetDate) return '—';
+                                                    const implDateObj = new Date(autoCreateTargetDate);
+                                                    const day = implDateObj.getDay();
+                                                    const diffToMon = (day === 0 ? -6 : 1) - day;
+                                                    const thisMon = new Date(implDateObj);
+                                                    thisMon.setDate(implDateObj.getDate() + diffToMon);
+                                                    const lastMon = new Date(thisMon);
+                                                    lastMon.setDate(thisMon.getDate() - 7);
+                                                    const lastSun = new Date(lastMon);
+                                                    lastSun.setDate(lastMon.getDate() + 6);
+                                                    return `${getFormattedDate(lastMon.toISOString().split('T')[0])} ～ ${getFormattedDate(lastSun.toISOString().split('T')[0])}`;
+                                                })()}
+                                            </div>
+                                        </div>
+                                        <button
+                                            onClick={prepareAutoCreate}
+                                            className="btn bg-indigo-500 text-white hover:bg-indigo-600 h-11 px-6 shadow-lg transform hover:-translate-y-1 transition font-bold"
+                                        >
+                                            🚀 一括自動作成
+                                        </button>
+                                    </div>
+                                    <p className="text-xs text-gray-400 mt-3">※ 同じ対象期間の記録が既に存在する利用者はスキップされます。</p>
+                                </div>
 
                                 {/* 1ヶ月分帳票出力 */}
                                 <MonthlyExportPanel

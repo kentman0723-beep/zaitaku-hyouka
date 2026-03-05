@@ -583,7 +583,8 @@
                     const newEvals = [];
                     let aiSuccessCount = 0;
                     let aiFailCount = 0;
-                    let workingModelName = null; // 動作するモデルをキャッシュ
+                    let workingModelName = null;
+                    let firstError = null;
 
                     for (const user of usersWithRecords) {
                         const userRecords = records.filter(r => {
@@ -618,18 +619,17 @@
                                 { key: 'workValidity', instruction: `以下の内容を元に、「在宅就労継続の妥当性」を1〜2文で作成してください。作業状況の確認と定期的な検討について書いてください。例：「在宅での作業状況を確認し、継続の妥当性について定期的に検討していく。」` }
                             ];
 
-                            // 動作するモデルを特定（まだ見つけていない場合）
+                            // 動作するモデルを特定（初回のみ）
                             if (!workingModelName) {
                                 const genAI = new window.GoogleGenerativeAI(currentKey);
-                                const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash', 'gemini-1.5-flash-latest'];
+                                const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash'];
                                 for (const modelName of modelsToTry) {
                                     try {
                                         console.log(`モデルテスト: ${modelName}`);
                                         const model = genAI.getGenerativeModel({ model: modelName });
                                         const testResult = await model.generateContent('テスト。「OK」とだけ返してください。');
                                         const testResponse = await testResult.response;
-                                        const testText = testResponse.text();
-                                        if (testText) {
+                                        if (testResponse.text()) {
                                             workingModelName = modelName;
                                             console.log(`動作するモデル発見: ${workingModelName}`);
                                             break;
@@ -638,47 +638,84 @@
                                         console.warn(`モデル ${modelName} 失敗:`, e.message);
                                     }
                                 }
-                                if (!workingModelName) {
-                                    console.error('利用可能なモデルが見つかりません');
-                                }
                             }
 
                             if (!workingModelName) {
-                                // モデル未発見でもユーザーデータは作成する（AI欄は空）
                                 console.warn(`${user.name}: モデル未検出のためAI生成スキップ`);
                             } else {
+                                // 1回のAPI呼び出しで5つの項目を一括生成
+                                try {
+                                    const genAI = new window.GoogleGenerativeAI(currentKey);
+                                    const model = genAI.getGenerativeModel({ model: workingModelName });
 
-                                // 確定モデルで各フィールドを生成
-                                const genAI = new window.GoogleGenerativeAI(currentKey);
-                                const model = genAI.getGenerativeModel({ model: workingModelName });
+                                    const batchPrompt = `あなたは障害福祉サービスの就労継続支援B型の支援員です。在宅における就労達成度評価シートの記入を行っています。
 
-                                for (const field of aiFields) {
-                                    try {
-                                        const prompt = `あなたは障害福祉サービスの就労継続支援B型の支援員です。在宅における就労達成度評価シートの記入を行っています。\n\n【指示】${field.instruction}\n福祉支援記録として適切な文章にしてください。出力はプレーンテキストのみ。\n\n【キーワード】\n${baseContext}`;
-                                        console.log(`AI生成中: ${field.key} for ${user.name} (model: ${workingModelName})`);
-                                        const result = await model.generateContent(prompt);
-                                        const response = await result.response;
-                                        const text = response.text();
-                                        if (text && text.trim()) {
-                                            aiSuccessCount++;
-                                            if (field.key === 'issues') issues = text.trim();
-                                            else if (field.key === 'improvementPlan') improvementPlan = text.trim();
-                                            else if (field.key === 'healthNotes') healthNotes = text.trim();
-                                            else if (field.key === 'otherNotes') otherNotes = text.trim();
-                                            else if (field.key === 'workValidity') workValidity = text.trim();
-                                        } else {
-                                            aiFailCount++;
-                                        }
-                                        // レート制限回避のため1秒待機
-                                        await new Promise(resolve => setTimeout(resolve, 1000));
-                                    } catch (e) {
-                                        aiFailCount++;
-                                        console.error(`AI generation failed for ${field.key}:`, e.message);
-                                        // エラー時は2秒待機してから次へ
-                                        await new Promise(resolve => setTimeout(resolve, 2000));
+以下の利用者情報をもとに、5つの項目をそれぞれ作成してください。
+各項目は【項目名】で区切って出力してください。出力はプレーンテキストのみ。
+
+${baseContext}
+
+以下の5項目を作成してください：
+
+【課題】
+在宅就労における課題を1〜2文で。支援の視点から書く。例：「調べ物の手順を丁寧に教え、理解を深めるよう支援する。楽しさも意識し取り組めるようにする。」
+
+【改善方針】
+今後における課題の改善方針を1〜2文で。段階的な支援と職員間の連携を含める。例：「今後は課題に対し段階的に支援を行い、職員間で連携を取りながら改善に努める。」
+
+【健康面】
+健康・体調面での留意事項を2〜3文で。月に一度の面会、LINEやDiscordでの連絡、電話でのフォロー等を含める。例：「最低でも月に一度は面会し健康面、体調面を把握しておく。連絡がない時はまずはLINEやDiscordで連絡し、返答がない場合は電話などで連絡する。」
+
+【その他】
+その他特記事項。特にない場合は「特になし」。
+
+【妥当性】
+在宅就労継続の妥当性を1〜2文で。作業状況の確認と定期的な検討について。例：「在宅での作業状況を確認し、継続の妥当性について定期的に検討していく。」`;
+
+                                    console.log(`AI一括生成中: ${user.name} (model: ${workingModelName})`);
+                                    const result = await model.generateContent(batchPrompt);
+                                    const response = await result.response;
+                                    const fullText = response.text();
+                                    console.log(`AI一括生成完了: ${user.name}, 文字数: ${fullText.length}`);
+
+                                    if (fullText && fullText.trim()) {
+                                        // パース: 【項目名】で分割
+                                        const parseSection = (text, startTag, endTags) => {
+                                            const startIdx = text.indexOf(startTag);
+                                            if (startIdx === -1) return '';
+                                            const afterStart = text.substring(startIdx + startTag.length);
+                                            let endIdx = afterStart.length;
+                                            for (const tag of endTags) {
+                                                const idx = afterStart.indexOf(tag);
+                                                if (idx !== -1 && idx < endIdx) endIdx = idx;
+                                            }
+                                            return afterStart.substring(0, endIdx).trim();
+                                        };
+
+                                        issues = parseSection(fullText, '【課題】', ['【改善方針】', '【健康面】', '【その他】', '【妥当性】']);
+                                        improvementPlan = parseSection(fullText, '【改善方針】', ['【健康面】', '【その他】', '【妥当性】']);
+                                        healthNotes = parseSection(fullText, '【健康面】', ['【その他】', '【妥当性】']);
+                                        otherNotes = parseSection(fullText, '【その他】', ['【妥当性】']);
+                                        workValidity = parseSection(fullText, '【妥当性】', []);
+
+                                        const fieldsGenerated = [issues, improvementPlan, healthNotes, otherNotes, workValidity].filter(f => f).length;
+                                        aiSuccessCount += fieldsGenerated;
+                                        aiFailCount += (5 - fieldsGenerated);
+                                        console.log(`${user.name}: ${fieldsGenerated}/5 フィールド生成成功`);
+                                    } else {
+                                        aiFailCount += 5;
                                     }
+
+                                    // レート制限回避のため3秒待機
+                                    await new Promise(resolve => setTimeout(resolve, 3000));
+                                } catch (e) {
+                                    aiFailCount += 5;
+                                    if (!firstError) firstError = e.message;
+                                    console.error(`AI一括生成失敗 (${user.name}):`, e.message);
+                                    // エラー時は5秒待機
+                                    await new Promise(resolve => setTimeout(resolve, 5000));
                                 }
-                            } // end if(!workingModelName) else
+                            }
                         } else {
                             console.warn(`AI生成スキップ: currentKey=${!!currentKey}, trainingGoal=${trainingGoal}`);
                         }
@@ -718,7 +755,7 @@
                         return [...filtered, ...newEvals];
                     });
 
-                    const aiMsg = currentKey ? `\nAI生成: 成功${aiSuccessCount}件, 失敗${aiFailCount}件\nキー取得元: ${keySource}, モデル: ${workingModelName || '未検出'}` : '\n⚠️ APIキー未設定のためAI生成はスキップされました';
+                    const aiMsg = currentKey ? `\nAI生成: 成功${aiSuccessCount}件, 失敗${aiFailCount}件\nキー取得元: ${keySource}, モデル: ${workingModelName || '未検出'}${firstError ? '\nエラー: ' + firstError : ''}` : '\n⚠️ APIキー未設定のためAI生成はスキップされました';
                     alert(`${usersWithRecords.length}名分の${month}月達成度評価を自動作成しました。${aiMsg}\n下の一覧からExcelダウンロードできます。`);
                 } catch (err) {
                     console.error('一括作成エラー:', err);

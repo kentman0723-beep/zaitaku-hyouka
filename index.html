@@ -521,7 +521,8 @@
                 try {
                     const year = monthlyFormData.targetYear;
                     const month = monthlyFormData.targetMonth;
-                    let currentKey = apiKey || MANUAL_API_KEY;
+                    let currentKey = apiKey || MANUAL_API_KEY || localStorage.getItem('sw_api_key') || '';
+                    let keySource = currentKey ? (apiKey ? 'state' : MANUAL_API_KEY ? 'manual' : 'localStorage') : 'none';
 
                     // APIキーがない場合、Supabaseから直接取得を試みる
                     if (!currentKey) {
@@ -534,14 +535,19 @@
                                 .single();
                             if (!error && data && data.value) {
                                 currentKey = data.value;
+                                keySource = 'supabase';
                                 setApiKey(data.value);
                                 localStorage.setItem('sw_api_key', data.value);
                                 console.log('APIキーをSupabaseから取得しました');
+                            } else {
+                                console.warn('Supabase APIキー取得失敗:', error);
                             }
                         } catch (e) {
                             console.error('APIキー取得失敗:', e);
                         }
                     }
+
+                    console.log(`APIキー状態: currentKey=${currentKey ? '有(' + currentKey.substring(0, 8) + '...)' : '無'}, source=${keySource}`);
 
                     if (!currentKey) {
                         alert('⚠️ APIキーが設定されていません。AI自動生成ができないため、課題・改善方針等の欄は空白になります。\n\n設定画面でAPIキーを確認してください。');
@@ -707,7 +713,7 @@
                         return [...filtered, ...newEvals];
                     });
 
-                    const aiMsg = currentKey ? `\nAI生成: 成功${aiSuccessCount}件, 失敗${aiFailCount}件` : '\n⚠️ APIキー未設定のためAI生成はスキップされました';
+                    const aiMsg = currentKey ? `\nAI生成: 成功${aiSuccessCount}件, 失敗${aiFailCount}件\nキー取得元: ${keySource}, モデル: ${workingModelName || '未検出'}` : '\n⚠️ APIキー未設定のためAI生成はスキップされました';
                     alert(`${usersWithRecords.length}名分の${month}月達成度評価を自動作成しました。${aiMsg}\n下の一覧からExcelダウンロードできます。`);
                 } catch (err) {
                     console.error('一括作成エラー:', err);

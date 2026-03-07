@@ -585,6 +585,7 @@
                     let aiFailCount = 0;
                     let workingModelName = null;
                     let firstError = null;
+                    const rateLimitedModels = new Set(); // レート制限に達したモデルを追跡
 
                     for (const user of usersWithRecords) {
                         const userRecords = records.filter(r => {
@@ -619,11 +620,14 @@
                                 { key: 'workValidity', instruction: `以下の内容を元に、「在宅就労継続の妥当性」を1〜2文で作成してください。作業状況の確認と定期的な検討について書いてください。例：「在宅での作業状況を確認し、継続の妥当性について定期的に検討していく。」` }
                             ];
 
+                            // 利用可能なモデルリスト（優先順）
+                            const allModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-3-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash'];
+
                             // 動作するモデルを特定（初回のみ）
                             if (!workingModelName) {
                                 const genAI = new window.GoogleGenerativeAI(currentKey);
-                                const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash'];
-                                for (const modelName of modelsToTry) {
+                                for (const modelName of allModels) {
+                                    if (rateLimitedModels.has(modelName)) continue;
                                     try {
                                         console.log(`モデルテスト: ${modelName}`);
                                         const model = genAI.getGenerativeModel({ model: modelName });
@@ -636,6 +640,10 @@
                                         }
                                     } catch (e) {
                                         console.warn(`モデル ${modelName} 失敗:`, e.message);
+                                        if (e.message && (e.message.includes('429') || e.message.includes('quota') || e.message.includes('RESOURCE_EXHAUSTED'))) {
+                                            rateLimitedModels.add(modelName);
+                                            console.warn(`モデル ${modelName} をレート制限リストに追加`);
+                                        }
                                     }
                                 }
                             }
@@ -643,9 +651,8 @@
                             if (!workingModelName) {
                                 console.warn(`${user.name}: モデル未検出のためAI生成スキップ`);
                             } else {
-                                // 1回のAPI呼び出しで5つの項目を一括生成（リトライ付き）
+                                // 1回のAPI呼び出しで5つの項目を一括生成（フォールバック付き）
                                 const genAI = new window.GoogleGenerativeAI(currentKey);
-                                const model = genAI.getGenerativeModel({ model: workingModelName });
                                 let generated = false;
 
                                 const batchPrompt = `あなたは障害福祉サービスの就労継続支援B型の支援員です。在宅における就労達成度評価シートの記入を行っています。
@@ -672,19 +679,28 @@ ${baseContext}
 【妥当性】
 在宅就労継続の妥当性を1〜2文で。作業状況の確認と定期的な検討について。例：「在宅での作業状況を確認し、継続の妥当性について定期的に検討していく。」`;
 
-                                for (let attempt = 1; attempt <= 3 && !generated; attempt++) {
+                                // 現在のモデルから開始し、429エラーなら別モデルへフォールバック
+                                let currentModelName = workingModelName;
+                                let attemptCount = 0;
+                                const maxTotalAttempts = allModels.length * 2; // 全モデル×2回まで
+
+                                while (!generated && attemptCount < maxTotalAttempts) {
+                                    attemptCount++;
                                     try {
-                                        if (attempt > 1) {
-                                            const retryWait = attempt * 10000; // 10秒, 20秒
-                                            console.log(`リトライ ${attempt}/3 (${retryWait / 1000}秒待機後)`);
+                                        if (attemptCount > 1) {
+                                            const retryWait = 3000;
                                             await new Promise(resolve => setTimeout(resolve, retryWait));
                                         }
 
-                                        console.log(`AI一括生成中: ${user.name} (model: ${workingModelName}, attempt: ${attempt})`);
+                                        console.log(`AI一括生成中: ${user.name} (model: ${currentModelName}, attempt: ${attemptCount})`);
+                                        const model = genAI.getGenerativeModel({ model: currentModelName });
                                         const result = await model.generateContent(batchPrompt);
                                         const response = await result.response;
                                         const fullText = response.text();
-                                        console.log(`AI一括生成完了: ${user.name}, 文字数: ${fullText.length}`);
+                                        console.log(`AI一括生成完了: ${user.name}, モデル: ${currentModelName}, 文字数: ${fullText.length}`);
+
+                                        // 成功したモデルを記録
+                                        workingModelName = currentModelName;
 
                                         if (fullText && fullText.trim()) {
                                             const parseSection = (text, startTag, endTags) => {
@@ -711,14 +727,32 @@ ${baseContext}
                                             generated = true;
                                         }
                                     } catch (e) {
-                                        console.warn(`AI生成エラー (${user.name}, attempt ${attempt}):`, e.message);
+                                        const isRateLimit = e.message && (e.message.includes('429') || e.message.includes('quota') || e.message.includes('RESOURCE_EXHAUSTED'));
+                                        console.warn(`AI生成エラー (${user.name}, model: ${currentModelName}, attempt ${attemptCount}):`, e.message);
                                         if (!firstError) firstError = e.message;
-                                        if (attempt === 3) aiFailCount += 5;
+
+                                        if (isRateLimit) {
+                                            // レート制限 → このモデルを記録して次のモデルへフォールバック
+                                            rateLimitedModels.add(currentModelName);
+                                            console.warn(`🔄 モデル ${currentModelName} がレート制限。別モデルへフォールバック...`);
+                                            const nextModel = allModels.find(m => !rateLimitedModels.has(m));
+                                            if (nextModel) {
+                                                currentModelName = nextModel;
+                                                workingModelName = nextModel;
+                                                console.log(`➡️ フォールバック先: ${nextModel}`);
+                                            } else {
+                                                console.error('❌ 全モデルがレート制限に達しました');
+                                                aiFailCount += 5;
+                                                break;
+                                            }
+                                        } else if (attemptCount >= maxTotalAttempts) {
+                                            aiFailCount += 5;
+                                        }
                                     }
                                 }
 
-                                // レート制限回避のため5秒待機
-                                await new Promise(resolve => setTimeout(resolve, 5000));
+                                // レート制限回避のため2秒待機
+                                await new Promise(resolve => setTimeout(resolve, 2000));
                             }
                         } else {
                             console.warn(`AI生成スキップ: currentKey=${!!currentKey}, trainingGoal=${trainingGoal}`);
@@ -759,7 +793,8 @@ ${baseContext}
                         return [...filtered, ...newEvals];
                     });
 
-                    const aiMsg = currentKey ? `\nAI生成: 成功${aiSuccessCount}件, 失敗${aiFailCount}件\nキー取得元: ${keySource}, モデル: ${workingModelName || '未検出'}${firstError ? '\nエラー: ' + firstError : ''}` : '\n⚠️ APIキー未設定のためAI生成はスキップされました';
+                    const rateLimitInfo = rateLimitedModels.size > 0 ? `\nレート制限モデル: ${[...rateLimitedModels].join(', ')}` : '';
+                    const aiMsg = currentKey ? `\nAI生成: 成功${aiSuccessCount}件, 失敗${aiFailCount}件\nキー取得元: ${keySource}, モデル: ${workingModelName || '未検出'}${rateLimitInfo}${firstError ? '\nエラー: ' + firstError : ''}` : '\n⚠️ APIキー未設定のためAI生成はスキップされました';
                     alert(`${usersWithRecords.length}名分の${month}月達成度評価を自動作成しました。${aiMsg}\n下の一覧からExcelダウンロードできます。`);
                 } catch (err) {
                     console.error('一括作成エラー:', err);

@@ -763,14 +763,24 @@ ${baseContext}
                             .filter(e => e.userId === user.id && (e.targetYear < year || (e.targetYear === year && e.targetMonth < month)))
                             .sort((a, b) => (b.targetYear * 12 + b.targetMonth) - (a.targetYear * 12 + a.targetMonth))[0];
 
+                        // 5名ごとに15分間隔でずらす（1-5人目: 10:00~10:15、6-10人目: 10:15~10:30、...）
+                        const userIndex = newEvals.length; // 0始まり
+                        const timeSlot = Math.floor(userIndex / 5); // 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, ...
+                        const baseMinutes = 10 * 60 + timeSlot * 15; // 10:00 + 15分 × スロット
+                        const startH = String(Math.floor(baseMinutes / 60)).padStart(2, '0');
+                        const startM = String(baseMinutes % 60).padStart(2, '0');
+                        const endMinutes = baseMinutes + 15;
+                        const endH = String(Math.floor(endMinutes / 60)).padStart(2, '0');
+                        const endM = String(endMinutes % 60).padStart(2, '0');
+
                         newEvals.push({
                             id: generateId(),
                             userId: user.id,
                             targetYear: year,
                             targetMonth: month,
                             implementationDate: implementationDate,
-                            timeStart: '10:00',
-                            timeEnd: '10:15',
+                            timeStart: `${startH}:${startM}`,
+                            timeEnd: `${endH}:${endM}`,
                             method: 'commute',
                             methodOther: '',
                             trainingGoal,

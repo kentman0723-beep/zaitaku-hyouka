@@ -15,6 +15,9 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <!-- Excel出力用ライブラリ (xlsx-js-style: スタイル対応版) -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+    <!-- ZIP出力用ライブラリ -->
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
     <!-- Supabase -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
@@ -1517,9 +1520,10 @@ ${text}`;
             const FORM_ROWS = 17; // 1帳票あたりの行数（行0~16）
             const FORM_GAP = 1;   // 帳票間の空白行数
 
-            const exportMonthlyFormattedExcel = (userId, year, month) => {
+            // ワークブック生成ヘルパー（ファイル保存せずワークブックオブジェクトを返す）
+            const generateMonthlyWorkbook = (userId, year, month) => {
                 const user = users.find(u => u.id === userId);
-                if (!user) { alert('利用者を選択してください'); return; }
+                if (!user) return null;
 
                 const monthRecords = records.filter(r => {
                     if (r.userId !== userId) return false;
@@ -1527,10 +1531,7 @@ ${text}`;
                     return d.getFullYear() === year && (d.getMonth() + 1) === month;
                 }).sort((a, b) => new Date(a.implementationDate) - new Date(b.implementationDate));
 
-                if (monthRecords.length === 0) {
-                    alert(`${year}年${month}月の週評価データが見つかりません。`);
-                    return;
-                }
+                if (monthRecords.length === 0) return null;
 
                 // 1つのシートに全帳票をまとめる
                 const wb = XLSX.utils.book_new();
@@ -1684,7 +1685,43 @@ ${text}`;
                 }
 
                 XLSX.utils.book_append_sheet(wb, ws, '週評価');
-                XLSX.writeFile(wb, `${user.name}_${year}年${month}月_週評価帳票.xlsx`);
+                return { wb, user };
+            };
+
+            // 個別利用者のExcel出力（従来通り）
+            const exportMonthlyFormattedExcel = (userId, year, month) => {
+                const result = generateMonthlyWorkbook(userId, year, month);
+                if (!result) {
+                    const user = users.find(u => u.id === userId);
+                    if (!user) { alert('利用者を選択してください'); return; }
+                    alert(`${year}年${month}月の週評価データが見つかりません。`);
+                    return;
+                }
+                XLSX.writeFile(result.wb, `${result.user.name}_${year}年${month}月_週評価帳票.xlsx`);
+            };
+
+            // 全利用者一括ZIPダウンロード
+            const exportAllUsersMonthlyZip = async (year, month) => {
+                const zip = new JSZip();
+                let fileCount = 0;
+
+                users.forEach(user => {
+                    const result = generateMonthlyWorkbook(user.id, year, month);
+                    if (result) {
+                        const xlsxData = XLSX.write(result.wb, { bookType: 'xlsx', type: 'array' });
+                        const fileName = `${result.user.name}_${year}年${month}月_週評価帳票.xlsx`;
+                        zip.file(fileName, xlsxData);
+                        fileCount++;
+                    }
+                });
+
+                if (fileCount === 0) {
+                    alert(`${year}年${month}月の週評価データを持つ利用者がいません。`);
+                    return;
+                }
+
+                const blob = await zip.generateAsync({ type: 'blob' });
+                saveAs(blob, `${year}年${month}月_全利用者_週評価帳票.zip`);
             };
 
             // 旧Excel出力（シンプル表形式を残す）
@@ -2387,6 +2424,7 @@ ${text}`;
                                 <MonthlyExportPanel
                                     sortedUsers={sortedUsers}
                                     onExport={(userId, year, month) => exportMonthlyFormattedExcel(userId, year, month)}
+                                    onBulkExport={(year, month) => exportAllUsersMonthlyZip(year, month)}
                                 />
 
                                 <div className="glass p-6 rounded-xl">
@@ -2880,11 +2918,21 @@ ${text}`;
         };
 
         // サブコンポーネント: 1ヶ月分帳票出力パネル
-        const MonthlyExportPanel = ({ sortedUsers, onExport }) => {
+        const MonthlyExportPanel = ({ sortedUsers, onExport, onBulkExport }) => {
             const now = new Date();
             const [expUserId, setExpUserId] = useState('');
             const [expYear, setExpYear] = useState(now.getFullYear());
             const [expMonth, setExpMonth] = useState(now.getMonth() + 1);
+            const [bulkLoading, setBulkLoading] = useState(false);
+
+            const handleBulkExport = async () => {
+                setBulkLoading(true);
+                try {
+                    await onBulkExport(expYear, expMonth);
+                } finally {
+                    setBulkLoading(false);
+                }
+            };
 
             return (
                 <div className="glass p-6 rounded-xl border-l-4 border-green-500">
@@ -2917,7 +2965,27 @@ ${text}`;
                             帳票様式で出力
                         </button>
                     </div>
-                    <p className="text-xs text-gray-400 mt-3">※ 選択した利用者・月に該当する週評価を帳票様式（画像と同じフォーマット）でExcel出力します。各週が別シートになります。</p>
+                    <div style={{ borderTop: '1px dashed #d1d5db', marginTop: '1rem', paddingTop: '1rem' }}>
+                        <div className="flex gap-4 items-center flex-wrap">
+                            <div style={{ flex: 1 }}>
+                                <p className="text-sm text-gray-600 font-bold">📦 全利用者一括ダウンロード</p>
+                                <p className="text-xs text-gray-400">上で選択した年月の全利用者データをZIPでまとめてダウンロードします。</p>
+                            </div>
+                            <button
+                                onClick={handleBulkExport}
+                                disabled={bulkLoading}
+                                className="btn h-11 px-6 shadow-lg transform hover:-translate-y-1"
+                                style={{ background: bulkLoading ? '#cbd5e1' : 'linear-gradient(135deg, #f59e0b, #d97706)', color: 'white', border: 'none', cursor: bulkLoading ? 'not-allowed' : 'pointer', fontWeight: 700 }}
+                            >
+                                {bulkLoading ? (
+                                    <span>⏳ 作成中...</span>
+                                ) : (
+                                    <><svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg> 一括ZIP出力</>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-3">※ 選択した利用者・月に該当する週評価を帳票様式（画像と同じフォーマット）でExcel出力します。各週が1シートにまとめられます。</p>
                 </div>
             );
         };

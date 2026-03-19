@@ -601,19 +601,29 @@
                         const workTexts = userRecords.map(r => r.workContent).filter(Boolean);
                         const condTexts = userRecords.map(r => r.condition).filter(Boolean);
 
-                        const trainingGoal = goalTexts.length > 0 ? goalTexts[goalTexts.length - 1] : '（データなし）';
-                        const activities = workTexts.length > 0 ? workTexts.join('\n') : '（データなし）';
-                        const achievement = condTexts.length > 0 ? condTexts.join('\n') : '（データなし）';
+                        // 週評価の生データ（AIへの参考情報 & フォールバック用）
+                        const rawTrainingGoal = goalTexts.length > 0 ? goalTexts[goalTexts.length - 1] : '（データなし）';
+                        const rawActivities = workTexts.length > 0 ? workTexts.join('\n') : '（データなし）';
+                        const rawAchievement = condTexts.length > 0 ? condTexts.join('\n') : '（データなし）';
 
-                        // AI で課題・改善方針・健康面・その他・妥当性を自動生成
+                        // AI で訓練目標・取組内容・達成度・課題・改善方針・健康面・その他・妥当性を自動生成
+                        let trainingGoal = rawTrainingGoal, activities = rawActivities, achievement = rawAchievement;
                         let issues = '', improvementPlan = '', healthNotes = '', otherNotes = '', workValidity = '';
 
                         if (currentKey && trainingGoal !== '（データなし）') {
                             const baseContext = `
 利用者: ${user.name}
-【訓練目標】${trainingGoal}
-【取組内容】${activities}
-【訓練目標に対する達成度】${achievement}`;
+
+以下は各週の週評価データです。これらを参考にして月単位の総合評価を作成してください。
+
+＜週ごとの訓練目標＞
+${goalTexts.map((g, i) => `第${i+1}週: ${g}`).join('\n')}
+
+＜週ごとの取組内容＞
+${workTexts.map((w, i) => `第${i+1}週: ${w}`).join('\n')}
+
+＜週ごとの体調・状況＞
+${condTexts.map((c, i) => `第${i+1}週: ${c}`).join('\n')}`;
 
                             const aiFields = [
                                 { key: 'issues', instruction: `以下の「訓練目標」「取組内容」「訓練目標に対する達成度」の内容を元に、在宅就労における「課題」を1〜2文で作成してください。支援の視点から書いてください。例：「調べ物の手順を丁寧に教え、理解を深めるよう支援する。楽しさも意識し取り組めるようにする。」` },
@@ -660,12 +670,22 @@
 
                                 const batchPrompt = `あなたは障害福祉サービスの就労継続支援B型の支援員です。在宅における就労達成度評価シートの記入を行っています。
 
-以下の利用者情報をもとに、5つの項目をそれぞれ作成してください。
+以下の利用者の各週の評価データをもとに、月単位の総合評価として8つの項目をそれぞれ作成してください。
+週評価のデータをそのまま転記するのではなく、ひと月分を総合的にまとめた評価文を作成してください。
 各項目は【項目名】で区切って出力してください。出力はプレーンテキストのみ。
 
 ${baseContext}
 
-以下の5項目を作成してください：
+以下の8項目を作成してください：
+
+【訓練目標】
+各週の訓練目標を総合的にまとめ、ひと月全体の訓練目標として3〜5文で作成してください。各週の目標の要点を統合し、月を通じた目標の方向性がわかるようにしてください。
+
+【取組内容】
+各週の取組内容を元に、ひと月間の取り組みを総合的にまとめた評価文を3〜5文で作成してください。週ごとの内容をそのまま列挙するのではなく、月全体を通じてどのような取り組みが行われ、どのような成果や進展があったかを総括してください。
+
+【達成度】
+各週の状況・体調データを元に、ひと月間の訓練目標に対する達成度を3〜5文で総合評価してください。月を通じた成長や変化、全体的な達成状況をまとめてください。
 
 【課題】
 在宅就労における課題を1〜2文で。支援の視点から書く。例：「調べ物の手順を丁寧に教え、理解を深めるよう支援する。楽しさも意識し取り組めるようにする。」
@@ -718,15 +738,23 @@ ${baseContext}
                                                 return afterStart.substring(0, endIdx).trim();
                                             };
 
+                                            const aiTrainingGoal = parseSection(fullText, '【訓練目標】', ['【取組内容】', '【達成度】', '【課題】', '【改善方針】', '【健康面】', '【その他】', '【妥当性】']);
+                                            const aiActivities = parseSection(fullText, '【取組内容】', ['【達成度】', '【課題】', '【改善方針】', '【健康面】', '【その他】', '【妥当性】']);
+                                            const aiAchievement = parseSection(fullText, '【達成度】', ['【課題】', '【改善方針】', '【健康面】', '【その他】', '【妥当性】']);
                                             issues = parseSection(fullText, '【課題】', ['【改善方針】', '【健康面】', '【その他】', '【妥当性】']);
                                             improvementPlan = parseSection(fullText, '【改善方針】', ['【健康面】', '【その他】', '【妥当性】']);
                                             healthNotes = parseSection(fullText, '【健康面】', ['【その他】', '【妥当性】']);
                                             otherNotes = parseSection(fullText, '【その他】', ['【妥当性】']);
                                             workValidity = parseSection(fullText, '【妥当性】', []);
 
-                                            const fieldsGenerated = [issues, improvementPlan, healthNotes, otherNotes, workValidity].filter(f => f).length;
+                                            // AI生成が成功した場合、月間総合評価で上書き
+                                            if (aiTrainingGoal) trainingGoal = aiTrainingGoal;
+                                            if (aiActivities) activities = aiActivities;
+                                            if (aiAchievement) achievement = aiAchievement;
+
+                                            const fieldsGenerated = [trainingGoal, activities, achievement, issues, improvementPlan, healthNotes, otherNotes, workValidity].filter(f => f).length;
                                             aiSuccessCount += fieldsGenerated;
-                                            aiFailCount += (5 - fieldsGenerated);
+                                            aiFailCount += (8 - fieldsGenerated);
                                             generated = true;
                                         }
                                     } catch (e) {
@@ -745,11 +773,11 @@ ${baseContext}
                                                 console.log(`➡️ フォールバック先: ${nextModel}`);
                                             } else {
                                                 console.error('❌ 全モデルがレート制限に達しました');
-                                                aiFailCount += 5;
+                                                aiFailCount += 8;
                                                 break;
                                             }
                                         } else if (attemptCount >= maxTotalAttempts) {
-                                            aiFailCount += 5;
+                                            aiFailCount += 8;
                                         }
                                     }
                                 }
@@ -925,6 +953,62 @@ ${baseContext}
                 } catch (e) { console.error('記録削除エラー:', e); }
             };
 
+            // --- 前回実施日の一括修復 ---
+            const [prevDateFixDone, setPrevDateFixDone] = useState(false);
+
+            useEffect(() => {
+                if (prevDateFixDone || records.length === 0 || supabaseStatus !== 'connected') return;
+
+                const runFix = async () => {
+                    const fixedRecords = [];
+                    const updatedRecords = [...records];
+
+                    for (let i = 0; i < updatedRecords.length; i++) {
+                        const rec = updatedRecords[i];
+                        if (!rec.implementationDate || !rec.previousDate) continue;
+                        // 前回実施日が実施日以降の場合は修正が必要
+                        if (new Date(rec.previousDate) >= new Date(rec.implementationDate)) {
+                            // 同じユーザーの、この記録より前の実施日を持つ記録を探す
+                            const earlierRecords = updatedRecords
+                                .filter(r => r.userId === rec.userId && r.id !== rec.id && new Date(r.implementationDate) < new Date(rec.implementationDate))
+                                .sort((a, b) => new Date(b.implementationDate) - new Date(a.implementationDate));
+                            const correctPrevDate = earlierRecords.length > 0 ? earlierRecords[0].implementationDate : '';
+                            if (correctPrevDate !== rec.previousDate) {
+                                updatedRecords[i] = { ...rec, previousDate: correctPrevDate };
+                                fixedRecords.push(updatedRecords[i]);
+                            }
+                        }
+                    }
+
+                    if (fixedRecords.length > 0) {
+                        console.log(`🔧 前回実施日を修復: ${fixedRecords.length}件`);
+                        // Supabase に直接更新
+                        for (const rec of fixedRecords) {
+                            try {
+                                const { error } = await supabase
+                                    .from('records')
+                                    .update({ previous_date: rec.previousDate })
+                                    .eq('id', rec.id);
+                                if (error) {
+                                    console.error(`修復エラー (${rec.id}):`, error);
+                                } else {
+                                    console.log(`✅ 修復完了: ${rec.id} → ${rec.previousDate || '(空)'}`);
+                                }
+                            } catch (e) {
+                                console.error(`修復エラー (${rec.id}):`, e);
+                            }
+                        }
+                        setRecords(updatedRecords);
+                        localStorage.setItem('sw_records', JSON.stringify(updatedRecords));
+                        console.log(`✅ 前回実施日の修復完了: ${fixedRecords.length}件`);
+                        alert(`前回実施日を ${fixedRecords.length} 件修正しました。`);
+                    }
+                    setPrevDateFixDone(true);
+                };
+
+                runFix();
+            }, [records, supabaseStatus, prevDateFixDone]);
+
             // 初期ロード (Supabase優先、フォールバックはlocalStorage)
             useEffect(() => {
                 loadFromSupabase();
@@ -989,11 +1073,14 @@ ${baseContext}
                     const latest = userRecords[0];
                     if (!latest) continue;
 
-                    // 前回実施日を計算
+                    // 前回実施日を計算（実施日より前の記録のみ対象）
                     const prevRecords = records
                         .filter(r => r.userId === user.id && new Date(r.implementationDate) < new Date(targetDate))
                         .sort((a, b) => new Date(b.implementationDate) - new Date(a.implementationDate));
-                    const previousDate = prevRecords.length > 0 ? prevRecords[0].implementationDate : latest.implementationDate;
+                    // フォールバック: 実施日の7日前（未来日付を使わない）
+                    const fallbackDate = new Date(targetDate);
+                    fallbackDate.setDate(fallbackDate.getDate() - 7);
+                    const previousDate = prevRecords.length > 0 ? prevRecords[0].implementationDate : fallbackDate.toISOString().split('T')[0];
 
                     // AI で言い回しを変える
                     let newCondition = latest.condition || '';
@@ -1004,12 +1091,12 @@ ${baseContext}
                         const rephrasePrompt = (fieldName, text) => {
                             const fieldDesc = {
                                 condition: '利用者の体調について',
-                                workContent: '在宅での1週間の作業内容について',
+                                workContent: '在宅での1ヶ月間の作業内容について',
                                 goals: '今後の目標'
                             };
                             return `
 あなたは障害福祉サービスの就労継続支援B型の支援員です。
-以下は前回の週評価の「${fieldDesc[fieldName]}」の記録です。
+以下は前回の月次評価の「${fieldDesc[fieldName]}」の記録です。
 この内容を参考に、同じ意味合い・状況を維持しつつ、言い回しや表現を少し変えた新しい文章を作成してください。
 文章の長さは元の文章とほぼ同じにしてください。「です・ます」調で、2〜3文程度にしてください。
 出力は作成した文章のみを行ってください。
@@ -1237,18 +1324,18 @@ ${text}`;
                 // プロンプト定義
                 let instruction = "";
                 if (targetField === 'condition') {
-                    instruction = "入力されたキーワードを元に、「体調について」の週評価報告文章を2〜3文程度で簡潔に作成してください。支援員が聞き取りを行い、利用者の1週間の健康状態や睡眠、服薬状況などを評価した記録です。「本日」ではなく「今週」「この1週間」という視点で記述してください。福祉支援記録として適切な「です・ます」調の文章にしてください。";
+                    instruction = "入力されたキーワードを元に、「体調について」の月次評価報告文章を2〜3文程度で簡潔に作成してください。支援員が聞き取りを行い、利用者の1ヶ月間の健康状態や睡眠、服薬状況などを評価した記録です。「本日」ではなく「今月」「この1ヶ月」という視点で記述してください。福祉支援記録として適切な「です・ます」調の文章にしてください。";
                 } else if (targetField === 'workContent') {
-                    instruction = "入力されたキーワードを元に、「1週間の在宅での作業内容について」の週評価報告文章を2〜3文程度で簡潔に作成してください。支援員が利用者に聞き取りを行い、1週間を通しての作業状況を評価した記録です。「本日」ではなく「今週」「この1週間」という視点で記述してください。福祉支援記録として適切な「です・ます」調の文章にしてください。";
+                    instruction = "入力されたキーワードを元に、「1ヶ月間の在宅での作業内容について」の月次評価報告文章を2〜3文程度で簡潔に作成してください。支援員が利用者に聞き取りを行い、1ヶ月間を通しての作業状況を評価した記録です。「本日」ではなく「今月」「この1ヶ月」という視点で記述してください。福祉支援記録として適切な「です・ます」調の文章にしてください。";
                 } else if (targetField === 'goals') {
-                    instruction = "入力されたキーワードを元に、「今後の目標」の週評価報告文章を2〜3文程度で簡潔に作成してください。支援員が利用者との聞き取りを踏まえ、来週に向けた目標を記録したものです。福祉支援記録として適切な「です・ます」調の文章にしてください。";
+                    instruction = "入力されたキーワードを元に、「今後の目標」の月次評価報告文章を2〜3文程度で簡潔に作成してください。支援員が利用者との聞き取りを踏まえ、来月に向けた目標を記録したものです。福祉支援記録として適切な「です・ます」調の文章にしてください。";
                 }
 
                 const systemPrompt = `
                     あなたは障害福祉サービスの就労継続支援B型の支援員です。
-                    利用者への聞き取りを元に、週間評価の報告文章を作成してください。
-                    これは「週評価」であり、1週間を通しての状況を支援員がまとめた記録です。
-                    「本日」「今日」という表現は使わず、「今週」「この1週間」という視点で書いてください。
+                    利用者への聞き取りを元に、月次評価の報告文章を作成してください。
+                    これは「月次評価」であり、1ヶ月間を通しての状況を支援員がまとめた記録です。
+                    「本日」「今日」という表現は使わず、「今月」「この1ヶ月」という視点で書いてください。
 
                     【指示】
                     ${instruction}
@@ -2580,9 +2667,9 @@ ${text}`;
                                     在宅における就労達成度評価シート
                                 </h2>
 
-                                {/* 対象年月・利用者選択 */}
+                                {/* 対象年月選択 */}
                                 <div className="glass p-6 rounded-xl">
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <div>
                                             <label className="block text-sm font-bold text-gray-600 mb-1">対象年月</label>
                                             <div className="flex gap-2">
@@ -2594,130 +2681,6 @@ ${text}`;
                                                 </select>
                                             </div>
                                         </div>
-                                        <div>
-                                            <label className="block text-sm font-bold text-gray-600 mb-1">対象者名 <span className="text-red-500">*</span></label>
-                                            <select className="input-field font-bold" value={monthlyFormData.userId} onChange={e => setMonthlyFormData({ ...monthlyFormData, userId: e.target.value })}>
-                                                <option value="">選択してください</option>
-                                                {sortedUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-bold text-gray-600 mb-1">受給者証番号</label>
-                                            <input type="text" className="input-field bg-gray-100 text-gray-500" readOnly value={monthlyFormData.userId ? (users.find(u => u.id === monthlyFormData.userId)?.number || '') : ''} />
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* 実施情報 */}
-                                <div className="glass p-6 rounded-xl">
-                                    <h3 className="font-bold text-gray-700 mb-4 border-b pb-2">実施情報</h3>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-sm font-bold text-gray-600 mb-1">実施日</label>
-                                            <input type="date" className="input-field" value={monthlyFormData.implementationDate} onChange={e => setMonthlyFormData({ ...monthlyFormData, implementationDate: e.target.value })} />
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-bold text-gray-600 mb-1">実施時間（15分間）</label>
-                                            <div className="flex items-center gap-2">
-                                                <input type="time" className="input-field" value={monthlyFormData.timeStart} onChange={e => {
-                                                    const start = e.target.value;
-                                                    const [h, m] = start.split(':').map(Number);
-                                                    const endMin = m + 15;
-                                                    const endH = h + Math.floor(endMin / 60);
-                                                    const end = `${String(endH).padStart(2, '0')}:${String(endMin % 60).padStart(2, '0')}`;
-                                                    setMonthlyFormData({ ...monthlyFormData, timeStart: start, timeEnd: end });
-                                                }} />
-                                                <span className="text-gray-400">～</span>
-                                                <input type="time" className="input-field bg-gray-100 text-gray-500" readOnly value={monthlyFormData.timeEnd} />
-                                            </div>
-                                            <p className="text-xs text-red-400 mt-1">※10～12時、13～15時の間で設定（12～13時は休憩）</p>
-                                        </div>
-                                    </div>
-                                    <div className="mt-4">
-                                        <label className="block text-sm font-bold text-gray-600 mb-2">実施方法</label>
-                                        <div className="flex gap-3">
-                                            {[['commute', '通所'], ['visit', '訪問'], ['other', 'その他']].map(([key, label]) => (
-                                                <label key={key} className={`cursor-pointer px-4 py-2 rounded-lg border text-sm transition ${monthlyFormData.method === key ? 'bg-amber-100 border-amber-500 text-amber-800 font-bold' : 'bg-white border-gray-200 text-gray-500'}`}>
-                                                    <input type="radio" name="mmethod" className="hidden" checked={monthlyFormData.method === key} onChange={() => setMonthlyFormData({ ...monthlyFormData, method: key })} />
-                                                    {label}
-                                                </label>
-                                            ))}
-                                            {monthlyFormData.method === 'other' && (
-                                                <input type="text" className="input-field w-48" placeholder="具体的に入力" value={monthlyFormData.methodOther} onChange={e => setMonthlyFormData({ ...monthlyFormData, methodOther: e.target.value })} />
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* 週評価からの自動抽出ボタン */}
-                                <div className="flex justify-center">
-                                    <button onClick={autoPopulateMonthly} className="btn bg-blue-500 text-white hover:bg-blue-600 px-6 py-3 shadow-lg transform hover:-translate-y-1 transition">
-                                        📋 週評価データから自動抽出（青枠の項目）
-                                    </button>
-                                </div>
-
-                                {/* 青い項目: 週評価から自動生成 */}
-                                <div className="glass p-6 rounded-xl space-y-5 border-l-4 border-blue-400">
-                                    <h3 className="font-bold text-blue-600 mb-2">📘 週評価データからの自動抽出項目</h3>
-                                    <div>
-                                        <label className="block text-sm font-bold text-gray-600 mb-1">訓練目標</label>
-                                        <textarea className="input-field h-20 bg-blue-50 border-blue-200" value={monthlyFormData.trainingGoal} onChange={e => setMonthlyFormData({ ...monthlyFormData, trainingGoal: e.target.value })} placeholder="週評価の目標から自動抽出されます" />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-bold text-gray-600 mb-1">取組内容</label>
-                                        <textarea className="input-field h-28 bg-blue-50 border-blue-200" value={monthlyFormData.activities} onChange={e => setMonthlyFormData({ ...monthlyFormData, activities: e.target.value })} placeholder="週評価の作業内容から自動抽出されます" />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-bold text-gray-600 mb-1">訓練目標に対する達成度</label>
-                                        <textarea className="input-field h-24 bg-blue-50 border-blue-200" value={monthlyFormData.achievement} onChange={e => setMonthlyFormData({ ...monthlyFormData, achievement: e.target.value })} placeholder="週評価の体調・状況から自動抽出されます" />
-                                    </div>
-                                </div>
-
-                                {/* 赤い項目: AI生成対応 */}
-                                <div className="glass p-6 rounded-xl space-y-5 border-l-4 border-red-400">
-                                    <h3 className="font-bold text-red-600 mb-2">📕 評価・分析項目（AI生成対応）</h3>
-                                    {[
-                                        ['issues', '課題', '例：調べ方が分からない、モチベーション維持'],
-                                        ['improvementPlan', '今後における課題の改善の方針', '例：手順を詳しく教える、楽しく取り組む工夫'],
-                                        ['healthNotes', '健康・体調面での留意事項', '例：月1回健康面確認、LINEやDiscordで連絡'],
-                                        ['otherNotes', 'その他特記事項', '例：特になし'],
-                                        ['workValidity', '在宅就労時の妥当性', '例：作業報告あり、自宅環境が整っている']
-                                    ].map(([field, label, placeholder]) => (
-                                        <div key={field}>
-                                            <div className="flex justify-between items-center mb-1">
-                                                <label className="block text-sm font-bold text-gray-600">{label}</label>
-                                                <button
-                                                    onClick={() => generateMonthlyContent(field)}
-                                                    disabled={monthlyLoading[field]}
-                                                    className="btn btn-ai rounded-full flex items-center gap-1"
-                                                >
-                                                    {monthlyLoading[field] ? <span className="loading-dots">生成中</span> : <><Icons.Sparkles /> AI作成</>}
-                                                </button>
-                                            </div>
-                                            <textarea
-                                                className="input-field h-24 bg-red-50 border-red-200"
-                                                value={monthlyFormData[field]}
-                                                onChange={e => setMonthlyFormData({ ...monthlyFormData, [field]: e.target.value })}
-                                                placeholder={placeholder}
-                                            />
-                                        </div>
-                                    ))}
-                                </div>
-
-                                {/* 署名・出力 */}
-                                <div className="glass p-5 rounded-xl">
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-                                        <div>
-                                            <label className="block text-sm font-bold text-gray-600 mb-1">評価実施者</label>
-                                            <input type="text" className="input-field bg-gray-100 text-gray-500" value={monthlyFormData.evaluator} readOnly />
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-bold text-gray-600 mb-1">前回の達成度評価日</label>
-                                            <input type="date" className="input-field" value={monthlyFormData.previousEvalDate} onChange={e => setMonthlyFormData({ ...monthlyFormData, previousEvalDate: e.target.value })} />
-                                        </div>
-                                        <button onClick={exportMonthlyExcel} className="btn btn-secondary h-11 px-6 shadow-lg transform hover:-translate-y-1">
-                                            <Icons.Download /> Excel出力
-                                        </button>
                                     </div>
                                 </div>
 

@@ -869,7 +869,7 @@ ${baseContext}
         .no-border-right { border-right: none; }
         .no-border { border: none; }
         .date-label { font-size: 10pt; text-align: center; border-bottom: 2px solid #000; }
-        .label { font-weight: bold; font-size: 9pt; text-align: center; background: #fff; white-space: nowrap; width: 14%; }
+        .label { font-weight: bold; font-size: 9pt; text-align: center; background: #fff; width: 14%; word-break: break-all; }
         .small-text { font-size: 7pt; }
         .value { text-align: center; }
         .check { width: 4%; font-size: 12pt; text-align: center; }
@@ -2688,6 +2688,12 @@ ${text}`;
                                                                     <td className="p-3 text-xs text-gray-400">{evalData.createdAt ? new Date(evalData.createdAt).toLocaleString('ja-JP') : ''}</td>
                                                                     <td className="p-3 text-right flex justify-end gap-2">
                                                                         <button
+                                                                            onClick={() => printAllMonthlyEvals([evalData])}
+                                                                            className="text-indigo-600 hover:underline text-sm font-bold"
+                                                                        >
+                                                                            🖨️ 印刷
+                                                                        </button>
+                                                                        <button
                                                                             onClick={() => exportSavedMonthlyExcel(evalData)}
                                                                             className="text-green-600 hover:underline text-sm font-bold"
                                                                         >
@@ -2706,7 +2712,7 @@ ${text}`;
                                                     </tbody>
                                                 </table>
                                             </div>
-                                            <p className="text-xs text-gray-400 mt-3">※ 各行の「Excel」ボタンで個別ダウンロード、右上の「全件ダウンロード」で一括ダウンロードできます。</p>
+                                            <p className="text-xs text-gray-400 mt-3">※ 各行の「🖨️ 印刷」で個別印刷、「📥 Excel」で個別ダウンロード、右上の「🖨️ 一括印刷」で全員分をまとめて印刷できます。</p>
                                         </div>
                                     );
                                 })()}

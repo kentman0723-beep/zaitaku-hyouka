@@ -415,7 +415,7 @@
                     if (monthlyExcelFile) {
                         try {
                             const data = await monthlyExcelFile.arrayBuffer();
-                            const workbook = window.XLSX.read(data, { type: 'array' });
+                            const workbook = window.XLSX.read(new Uint8Array(data), { type: 'array' });
                             const firstSheetName = workbook.SheetNames[0];
                             const worksheet = workbook.Sheets[firstSheetName];
                             importedExcelData = window.XLSX.utils.sheet_to_json(worksheet, { defval: '' });
@@ -483,10 +483,12 @@
                         }
                     }
 
+                    let aiSuccessCount = 0;
                     let aiFailCount = 0;
                     let workingModelName = null;
                     let firstError = null;
                     const rateLimitedModels = new Set(); // レート制限に達したモデルを追跡
+                    const newEvals = [];
 
                     for (const user of usersWithRecords) {
                         // --- 実施日の決定ロジック ---

@@ -418,7 +418,7 @@
                             const workbook = window.XLSX.read(new Uint8Array(data), { type: 'array' });
                             const firstSheetName = workbook.SheetNames[0];
                             const worksheet = workbook.Sheets[firstSheetName];
-                            importedExcelData = window.XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+                            importedExcelData = window.XLSX.utils.sheet_to_json(worksheet, { defval: '', raw: false });
                             console.log('インポートされたExcelデータ:', importedExcelData);
                         } catch (e) {
                             console.error('Excel読み込みエラー:', e);
@@ -498,28 +498,50 @@
                             const normalizedUserName = (user.name || '').replace(/\s+/g, '');
                             // 該当ユーザーの、施設外就労で、対象月の15日以降のデータを探す
                             const matchingRow = importedExcelData.find(row => {
-                                const rowName = (row['利用者名'] || '').replace(/\s+/g, '');
+                                // ヘッダー名に揺れがある場合を考慮してキーを柔軟に探す
+                                const keys = Object.keys(row);
+                                const nameKey = keys.find(k => k.includes('利用者') || k.includes('氏名') || k.includes('名前'));
+                                const statusKey = keys.find(k => k.includes('提供状況') || k.includes('サービス'));
+                                const dateKey = keys.find(k => k.includes('日付') || k.includes('日'));
+
+                                if (!nameKey || !statusKey || !dateKey) return false;
+
+                                const rowName = String(row[nameKey] || '').replace(/\s+/g, '');
                                 if (rowName !== normalizedUserName) return false;
-                                if (String(row['サービス提供状況'] || '').includes('施設外就労') === false && row['サービス提供状況'] !== '施設外就労') return false;
+
+                                const statusStr = String(row[statusKey] || '');
+                                if (!statusStr.includes('施設外就労')) return false;
                                 
-                                const dateStr = String(row['日付'] || ''); // 例: "02/17(火)"
-                                const match = dateStr.match(/(\d+)\/(\d+)/);
-                                if (match) {
-                                    const rowMonth = parseInt(match[1], 10);
-                                    const rowDay = parseInt(match[2], 10);
-                                    if (rowMonth === month && rowDay >= 15) {
-                                        return true;
+                                const dateStr = String(row[dateKey] || '').replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0));
+
+                                let rowMonth = -1;
+                                let rowDay = -1;
+
+                                const matchSlash = dateStr.match(/(\d+)\s*[/／]\s*(\d+)/);
+                                if (matchSlash) {
+                                    rowMonth = parseInt(matchSlash[1], 10);
+                                    rowDay = parseInt(matchSlash[2], 10);
+                                } else {
+                                    const matchJP = dateStr.match(/(\d+)\s*月\s*(\d+)\s*日/);
+                                    if (matchJP) {
+                                        rowMonth = parseInt(matchJP[1], 10);
+                                        rowDay = parseInt(matchJP[2], 10);
                                     }
+                                }
+
+                                if (rowMonth === month && rowDay >= 15) {
+                                    // マッチした行の情報を保存しておく（抽出用）
+                                    row._extractedDay = rowDay;
+                                    return true;
                                 }
                                 return false;
                             });
 
                             if (matchingRow) {
-                                const dateStr = String(matchingRow['日付'] || '');
-                                const match = dateStr.match(/(\d+)\/(\d+)/);
-                                if (match) {
-                                    computedImplDate = `${year}-${String(month).padStart(2, '0')}-${String(match[2]).padStart(2, '0')}`;
-                                }
+                                computedImplDate = `${year}-${String(month).padStart(2, '0')}-${String(matchingRow._extractedDay).padStart(2, '0')}`;
+                                console.log(`${user.name} の実施日をExcelから取得: ${computedImplDate}`);
+                            } else {
+                                console.log(`${user.name} の「施設外就労 (15日以降)」が見つかりません。デフォルト15日を適用`);
                             }
                         }
 

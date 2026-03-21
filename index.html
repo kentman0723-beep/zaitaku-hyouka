@@ -842,7 +842,7 @@ ${baseContext}
                             <tr>
                                 <td colspan="9" class="confirm">上記内容を確認し、評価実施者と共有しました。</td>
                             </tr>
-                            <tr>
+                            <tr class="signature-row">
                                 <td colspan="3" class="no-border"></td>
                                 <td colspan="2" class="label">対象者署名</td>
                                 <td colspan="4" class="signature"></td>
@@ -875,7 +875,8 @@ ${baseContext}
         .check { width: 4%; font-size: 12pt; text-align: center; }
         .content { text-align: left; vertical-align: top; padding: 6px 8px; min-height: 60px; line-height: 1.6; font-size: 9.5pt; }
         .confirm { font-weight: bold; font-size: 11pt; text-align: center; padding: 10px; }
-        .signature { border-bottom: 1px solid #000; min-height: 30px; }
+        .signature { border-bottom: 1px solid #000; height: 50px; }
+        .signature-row td { height: 50px; }
         @media print {
             body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             .page { padding: 5mm; }

@@ -398,6 +398,7 @@
             // localStorage バックアップ（月次評価）
             useEffect(() => { localStorage.setItem('sw_monthly_evaluations', JSON.stringify(savedMonthlyEvals)); }, [savedMonthlyEvals]);
 
+            const [monthlyExcelFile, setMonthlyExcelFile] = useState(null);
             const [bulkCreating, setBulkCreating] = useState(false);
 
             // --- 全利用者の達成度評価を一括自動作成 ---
@@ -408,6 +409,24 @@
                     const month = monthlyFormData.targetMonth;
                     let currentKey = apiKey || MANUAL_API_KEY || localStorage.getItem('sw_api_key') || '';
                     let keySource = currentKey ? (apiKey ? 'state' : MANUAL_API_KEY ? 'manual' : 'localStorage') : 'none';
+
+                    // Excelデータの読み込みとパース
+                    let importedExcelData = null;
+                    if (monthlyExcelFile) {
+                        try {
+                            const data = await monthlyExcelFile.arrayBuffer();
+                            const workbook = window.XLSX.read(data, { type: 'array' });
+                            const firstSheetName = workbook.SheetNames[0];
+                            const worksheet = workbook.Sheets[firstSheetName];
+                            importedExcelData = window.XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+                            console.log('インポートされたExcelデータ:', importedExcelData);
+                        } catch (e) {
+                            console.error('Excel読み込みエラー:', e);
+                            alert('添付されたExcelファイルの読み込みに失敗しました。ファイルを確認してください。');
+                            setBulkCreating(false);
+                            return;
+                        }
+                    }
 
                     // APIキーがない場合、Supabaseから直接取得を試みる
                     if (!currentKey) {
@@ -464,15 +483,44 @@
                         }
                     }
 
-                    const implementationDate = `${year}-${String(month).padStart(2, '0')}-15`;
-                    const newEvals = [];
-                    let aiSuccessCount = 0;
                     let aiFailCount = 0;
                     let workingModelName = null;
                     let firstError = null;
                     const rateLimitedModels = new Set(); // レート制限に達したモデルを追跡
 
                     for (const user of usersWithRecords) {
+                        // --- 実施日の決定ロジック ---
+                        let computedImplDate = `${year}-${String(month).padStart(2, '0')}-15`; // デフォルトは15日
+                        if (importedExcelData) {
+                            // 空白を除去して比較
+                            const normalizedUserName = (user.name || '').replace(/\s+/g, '');
+                            // 該当ユーザーの、施設外就労で、対象月の15日以降のデータを探す
+                            const matchingRow = importedExcelData.find(row => {
+                                const rowName = (row['利用者名'] || '').replace(/\s+/g, '');
+                                if (rowName !== normalizedUserName) return false;
+                                if (String(row['サービス提供状況'] || '').includes('施設外就労') === false && row['サービス提供状況'] !== '施設外就労') return false;
+                                
+                                const dateStr = String(row['日付'] || ''); // 例: "02/17(火)"
+                                const match = dateStr.match(/(\d+)\/(\d+)/);
+                                if (match) {
+                                    const rowMonth = parseInt(match[1], 10);
+                                    const rowDay = parseInt(match[2], 10);
+                                    if (rowMonth === month && rowDay >= 15) {
+                                        return true;
+                                    }
+                                }
+                                return false;
+                            });
+
+                            if (matchingRow) {
+                                const dateStr = String(matchingRow['日付'] || '');
+                                const match = dateStr.match(/(\d+)\/(\d+)/);
+                                if (match) {
+                                    computedImplDate = `${year}-${String(month).padStart(2, '0')}-${String(match[2]).padStart(2, '0')}`;
+                                }
+                            }
+                        }
+
                         const userRecords = records.filter(r => {
                             if (r.userId !== user.id) return false;
                             const d = new Date(r.implementationDate);
@@ -700,7 +748,7 @@ ${baseContext}
                             userId: user.id,
                             targetYear: year,
                             targetMonth: month,
-                            implementationDate: implementationDate,
+                            implementationDate: computedImplDate,
                             timeStart: `${startH}:${startM}`,
                             timeEnd: `${endH}:${endM}`,
                             method: 'commute',
@@ -2631,9 +2679,20 @@ ${text}`;
                                     </h3>
                                     <p className="text-sm text-gray-500 mb-4">
                                         選択中の対象年月（{monthlyFormData.targetYear}年{monthlyFormData.targetMonth}月）について、
-                                        週評価データが存在する全利用者の達成度評価を一括で自動作成します。
-                                        実施日は{monthlyFormData.targetMonth}月15日に設定されます。
+                                        週評価データが存在する全利用者の達成度評価を一括で自動作成します。<br/>
+                                        ※実績のExcelファイル（任意）を添付すると、各利用者の「施設外就労かつ15日以降」の日付を自動で「実施日」に設定します。添付がない場合はデフォルトで15日になります。
                                     </p>
+                                    
+                                    <div className="mb-4">
+                                        <label className="block text-sm font-bold text-gray-600 mb-1">作業時間エクセルデータ (任意)</label>
+                                        <input 
+                                            type="file" 
+                                            accept=".xlsx, .xls"
+                                            onChange={(e) => setMonthlyExcelFile(e.target.files[0] || null)}
+                                            className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-amber-50 file:text-amber-700 hover:file:bg-amber-100"
+                                        />
+                                    </div>
+
                                     <button
                                         onClick={autoCreateAllMonthlyEvaluations}
                                         disabled={bulkCreating}

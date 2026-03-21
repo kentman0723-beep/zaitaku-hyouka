@@ -2142,13 +2142,11 @@ ${text}`;
                             <button onClick={() => setView('history')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition ${view === 'history' ? 'bg-green-50 text-green-700' : 'text-gray-600 hover:bg-gray-50'}`}>
                                 <Icons.Table /> 記録一覧・出力
                             </button>
-                            <button onClick={() => setView('account')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition ${view === 'account' ? 'bg-green-50 text-green-700' : 'text-gray-600 hover:bg-gray-50'}`}>
-                                <Icons.User /> アカウント設定
-                            </button>
+
                         </nav>
                         <div className="p-4 border-t">
-                            <button onClick={onLogout} className="w-full flex items-center gap-2 px-4 py-2 rounded-lg text-sm text-red-500 hover:bg-red-50 transition font-medium">
-                                🔒 ロックする
+                            <button onClick={onLogout} className="w-full flex items-center gap-2 px-4 py-2 rounded-lg text-sm text-gray-500 hover:bg-gray-100 transition font-medium">
+                                <Icons.LogOut /> 退出する
                             </button>
                         </div>
                     </div>
@@ -2441,82 +2439,7 @@ ${text}`;
                             </div>
                         )}
 
-                        {/* アカウント設定 */}
-                        {view === 'account' && (
-                            <div className="max-w-2xl mx-auto space-y-6">
-                                <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-                                    <span className="bg-emerald-500 w-2 h-8 rounded-full inline-block"></span>
-                                    アカウント設定
-                                </h2>
 
-                                <div className="glass p-6 rounded-xl border-l-4 border-emerald-500">
-                                    <h3 className="font-bold mb-4 text-gray-800 flex items-center gap-2">👤 アカウント情報</h3>
-                                    <div className="space-y-3">
-                                        <div>
-                                            <label className="block text-sm font-bold text-gray-500 mb-1">メールアドレス</label>
-                                            <div className="input-field bg-gray-100 text-gray-700">{authUser?.email || '未設定'}</div>
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-bold text-gray-500 mb-1">ログイン方法</label>
-                                            <div className="input-field bg-gray-100 text-gray-700">
-                                                {authUser?.app_metadata?.provider === 'google' ? '🔗 Googleアカウント' : '📧 メール + パスワード'}
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-bold text-gray-500 mb-1">AI機能 (APIキー)</label>
-                                            <div className="input-field bg-gray-100 text-gray-700 flex items-center gap-2 justify-between">
-                                                <div className="flex items-center gap-2">
-                                                    <span className={`w-2 h-2 rounded-full ${apiKey ? 'bg-green-500' : 'bg-red-500'}`}></span>
-                                                    {apiKey ? '有効 (システム管理)' : '未設定 (管理者に連絡してください)'}
-                                                </div>
-                                                {apiKey && (
-                                                    <button
-                                                        onClick={async () => {
-                                                            try {
-                                                                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
-                                                                const data = await res.json();
-                                                                if (data.error) throw new Error(data.error.message);
-
-                                                                const availableModels = data.models?.map(m => m.name.replace('models/', '')) || [];
-                                                                alert('利用可能なモデル一覧:\n' + availableModels.join('\n'));
-                                                                console.log('Available models:', availableModels);
-                                                            } catch (e) {
-                                                                alert('モデル確認エラー: ' + e.message);
-                                                            }
-                                                        }}
-                                                        className="text-xs bg-gray-200 hover:bg-gray-300 px-2 py-1 rounded text-gray-700 font-bold"
-                                                    >
-                                                        🔍 接続診断
-                                                    </button>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className={`glass p-6 rounded-xl border-l-4 ${supabaseStatus === 'connected' ? 'border-green-500' :
-                                    supabaseStatus === 'error' ? 'border-red-500' : 'border-yellow-500'}`}>
-                                    <h3 className="font-bold mb-3">☁️ クラウド接続</h3>
-                                    <div className="flex items-center gap-3">
-                                        <span className={`inline-block w-3 h-3 rounded-full ${supabaseStatus === 'connected' ? 'bg-green-500' :
-                                            supabaseStatus === 'error' ? 'bg-red-500' : 'bg-yellow-500 animate-pulse'}`}></span>
-                                        <span className="font-medium text-sm">
-                                            {supabaseStatus === 'connected' && '接続中 — データはクラウドに自動保存'}
-                                            {supabaseStatus === 'error' && '接続エラー — ローカル保存モード'}
-                                            {supabaseStatus === 'connecting' && '接続中...'}
-                                        </span>
-                                    </div>
-                                </div>
-
-
-                                <div className="glass p-6 rounded-xl">
-                                    <button onClick={onLogout} className="btn w-full h-12 text-base border-2 border-red-200 text-red-500 hover:bg-red-50 font-bold">
-                                        🔒 ロックする
-                                    </button>
-                                    <p className="text-xs text-gray-400 mt-3 text-center">ロックしてもデータは保持されます。</p>
-                                </div>
-                            </div>
-                        )}
 
                         {/* 5. 月1達成度評価 */}
                         {view === 'monthly' && (

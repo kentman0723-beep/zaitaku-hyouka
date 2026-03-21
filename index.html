@@ -418,8 +418,47 @@
                             const workbook = window.XLSX.read(new Uint8Array(data), { type: 'array' });
                             const firstSheetName = workbook.SheetNames[0];
                             const worksheet = workbook.Sheets[firstSheetName];
-                            importedExcelData = window.XLSX.utils.sheet_to_json(worksheet, { defval: '', raw: false });
-                            console.log('インポートされたExcelデータ:', importedExcelData);
+                            
+                            // 2次元配列として読み込み（ヘッダー行より上の無駄な行をスキップするため）
+                            const rawData = window.XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: false, defval: '' });
+                            
+                            let headerRowIdx = -1;
+                            let nameColIdx = -1;
+                            let statusColIdx = -1;
+                            let dateColIdx = -1;
+
+                            for (let i = 0; i < Math.min(rawData.length, 20); i++) {
+                                const row = rawData[i];
+                                if (!Array.isArray(row)) continue;
+                                
+                                const nIdx = row.findIndex(c => String(c).includes('利用者') || String(c).includes('氏名') || String(c).includes('名前'));
+                                const sIdx = row.findIndex(c => String(c).includes('提供状況') || String(c).includes('サービス'));
+                                const dIdx = row.findIndex(c => String(c).includes('日付') || String(c).includes('日'));
+
+                                if (nIdx !== -1 && sIdx !== -1 && dIdx !== -1) {
+                                    headerRowIdx = i;
+                                    nameColIdx = nIdx;
+                                    statusColIdx = sIdx;
+                                    dateColIdx = dIdx;
+                                    break;
+                                }
+                            }
+
+                            if (headerRowIdx !== -1) {
+                                importedExcelData = [];
+                                for (let i = headerRowIdx + 1; i < rawData.length; i++) {
+                                    const r = rawData[i];
+                                    if (!Array.isArray(r) || r.length === 0) continue;
+                                    importedExcelData.push({
+                                        '利用者名': String(r[nameColIdx] || ''),
+                                        'サービス提供状況': String(r[statusColIdx] || ''),
+                                        '日付': String(r[dateColIdx] || '')
+                                    });
+                                }
+                                console.log('インポートされたExcelデータ (ヘッダ識別成功):', importedExcelData);
+                            } else {
+                                console.warn('Excelファイルの連携ヘッダー行が見つかりませんでした');
+                            }
                         } catch (e) {
                             console.error('Excel読み込みエラー:', e);
                             alert('添付されたExcelファイルの読み込みに失敗しました。ファイルを確認してください。');
@@ -498,31 +537,25 @@
                             const normalizedUserName = (user.name || '').replace(/\s+/g, '');
                             // 該当ユーザーの、施設外就労で、対象月の15日以降のデータを探す
                             const matchingRow = importedExcelData.find(row => {
-                                // ヘッダー名に揺れがある場合を考慮してキーを柔軟に探す
-                                const keys = Object.keys(row);
-                                const nameKey = keys.find(k => k.includes('利用者') || k.includes('氏名') || k.includes('名前'));
-                                const statusKey = keys.find(k => k.includes('提供状況') || k.includes('サービス'));
-                                const dateKey = keys.find(k => k.includes('日付') || k.includes('日'));
-
-                                if (!nameKey || !statusKey || !dateKey) return false;
-
-                                const rowName = String(row[nameKey] || '').replace(/\s+/g, '');
+                                const rowName = String(row['利用者名']).replace(/\s+/g, '');
                                 if (rowName !== normalizedUserName) return false;
 
-                                const statusStr = String(row[statusKey] || '');
+                                const statusStr = String(row['サービス提供状況']);
                                 if (!statusStr.includes('施設外就労')) return false;
                                 
-                                const dateStr = String(row[dateKey] || '').replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0));
+                                const dateStr = String(row['日付']).replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0));
 
                                 let rowMonth = -1;
                                 let rowDay = -1;
 
-                                const matchSlash = dateStr.match(/(\d+)\s*[/／]\s*(\d+)/);
+                                // "02/17", "2026/02/17", "2026-02-17" などをカバー
+                                const matchSlash = dateStr.match(/(?:(?:\d{2,4})[-/／])?(\d{1,2})[-/／](\d{1,2})/);
                                 if (matchSlash) {
                                     rowMonth = parseInt(matchSlash[1], 10);
                                     rowDay = parseInt(matchSlash[2], 10);
                                 } else {
-                                    const matchJP = dateStr.match(/(\d+)\s*月\s*(\d+)\s*日/);
+                                    // "2月17日", "2026年2月17日" などをカバー
+                                    const matchJP = dateStr.match(/(?:(?:\d{2,4})\s*年\s*)?(\d{1,2})\s*月\s*(\d{1,2})\s*日/);
                                     if (matchJP) {
                                         rowMonth = parseInt(matchJP[1], 10);
                                         rowDay = parseInt(matchJP[2], 10);

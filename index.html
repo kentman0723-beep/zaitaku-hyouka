@@ -747,6 +747,154 @@ ${baseContext}
                 }
             };
 
+            // --- 達成度評価の一括印刷 ---
+            const printAllMonthlyEvals = (evalsToprint) => {
+                const printWindow = window.open('', '_blank');
+                if (!printWindow) { alert('ポップアップがブロックされました。許可してください。'); return; }
+
+                const methodCheck = (evalData, key) => evalData.method === key ? '☑' : '□';
+
+                const pages = evalsToprint.map(evalData => {
+                    const user = users.find(u => u.id === evalData.userId);
+                    const userName = user ? user.name : '不明';
+                    const userNumber = user ? (user.number || '') : '';
+                    const prevDate = evalData.previousEvalDate ? new Date(evalData.previousEvalDate) : null;
+                    const prevDateStr = prevDate ? `令和${prevDate.getFullYear() - 2018}年${prevDate.getMonth() + 1}月${prevDate.getDate()}日` : '';
+
+                    return `
+                    <div class="page">
+                        <table>
+                            <tr>
+                                <td colspan="6" class="title no-border-top no-border-left">在宅における就労達成度評価シート</td>
+                                <td colspan="3" class="date-label no-border-top no-border-right">令和${evalData.targetYear - 2018}年${evalData.targetMonth}月分</td>
+                            </tr>
+                            <tr>
+                                <td class="label">対象者名</td>
+                                <td colspan="4" class="value">${userName}</td>
+                                <td class="label small-text">受給者証</td>
+                                <td colspan="3" class="value">${userNumber}</td>
+                            </tr>
+                            <tr>
+                                <td class="label">実施日</td>
+                                <td colspan="3" class="value">${evalData.targetYear}年${evalData.targetMonth}月${new Date(evalData.implementationDate).getDate()}日</td>
+                                <td class="label">実施時間</td>
+                                <td colspan="4" class="value">${evalData.timeStart} ～ ${evalData.timeEnd}</td>
+                            </tr>
+                            <tr>
+                                <td rowspan="2" class="label">実施方法</td>
+                                <td class="check">${methodCheck(evalData, 'line')}</td>
+                                <td>LINE</td>
+                                <td class="check">${methodCheck(evalData, 'discord')}</td>
+                                <td>Discord</td>
+                                <td class="check">${methodCheck(evalData, 'googleForm')}</td>
+                                <td>Googleフォーム</td>
+                                <td class="check">${methodCheck(evalData, 'phone')}</td>
+                                <td>電話</td>
+                            </tr>
+                            <tr>
+                                <td class="check">${methodCheck(evalData, 'visit')}</td>
+                                <td>訪問</td>
+                                <td class="check">${methodCheck(evalData, 'commute')}</td>
+                                <td>通所</td>
+                                <td class="check">${methodCheck(evalData, 'other')}</td>
+                                <td>その他</td>
+                                <td></td>
+                                <td></td>
+                            </tr>
+                            <tr>
+                                <td class="label">訓練目標</td>
+                                <td colspan="8" class="content">${(evalData.trainingGoal || '').replace(/\n/g, '<br>')}</td>
+                            </tr>
+                            <tr>
+                                <td class="label">取組内容</td>
+                                <td colspan="8" class="content">${(evalData.activities || '').replace(/\n/g, '<br>')}</td>
+                            </tr>
+                            <tr>
+                                <td class="label">訓練目標に対する<br>達成度</td>
+                                <td colspan="8" class="content">${(evalData.achievement || '').replace(/\n/g, '<br>')}</td>
+                            </tr>
+                            <tr>
+                                <td class="label">課題</td>
+                                <td colspan="8" class="content">${(evalData.issues || '').replace(/\n/g, '<br>')}</td>
+                            </tr>
+                            <tr>
+                                <td class="label">今後における課題の<br>改善方針</td>
+                                <td colspan="8" class="content">${(evalData.improvementPlan || '').replace(/\n/g, '<br>')}</td>
+                            </tr>
+                            <tr>
+                                <td class="label">健康・体調面での<br>留意事項</td>
+                                <td colspan="8" class="content">${(evalData.healthNotes || '').replace(/\n/g, '<br>')}</td>
+                            </tr>
+                            <tr>
+                                <td class="label">その他特記事項</td>
+                                <td colspan="8" class="content">${(evalData.otherNotes || '').replace(/\n/g, '<br>')}</td>
+                            </tr>
+                            <tr>
+                                <td class="label">在宅就労継続の<br>妥当性</td>
+                                <td colspan="8" class="content">${(evalData.workValidity || '').replace(/\n/g, '<br>')}</td>
+                            </tr>
+                            <tr>
+                                <td class="label">評価実施者</td>
+                                <td colspan="2" class="value">${evalData.evaluator || ''}</td>
+                                <td colspan="2" class="label small-text">前回の達成度評価日</td>
+                                <td colspan="4" class="value">${prevDateStr}</td>
+                            </tr>
+                            <tr>
+                                <td colspan="9" class="confirm">上記内容を確認し、評価実施者と共有しました。</td>
+                            </tr>
+                            <tr>
+                                <td colspan="3" class="no-border"></td>
+                                <td colspan="2" class="label">対象者署名</td>
+                                <td colspan="4" class="signature"></td>
+                            </tr>
+                        </table>
+                    </div>`;
+                }).join('');
+
+                printWindow.document.write(`<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>達成度評価 一括印刷</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'MS PGothic', 'ＭＳ Ｐゴシック', sans-serif; font-size: 10pt; }
+        .page { page-break-after: always; padding: 10mm; }
+        .page:last-child { page-break-after: auto; }
+        table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+        td { border: 1px solid #000; padding: 4px 6px; vertical-align: middle; text-align: center; }
+        .title { font-size: 16pt; font-weight: bold; text-align: left; padding: 8px 4px; border-bottom: 2px solid #000; }
+        .no-border-top { border-top: none; }
+        .no-border-left { border-left: none; }
+        .no-border-right { border-right: none; }
+        .no-border { border: none; }
+        .date-label { font-size: 10pt; text-align: center; border-bottom: 2px solid #000; }
+        .label { font-weight: bold; font-size: 9pt; text-align: center; background: #fff; white-space: nowrap; width: 14%; }
+        .small-text { font-size: 7pt; }
+        .value { text-align: center; }
+        .check { width: 4%; font-size: 12pt; text-align: center; }
+        .content { text-align: left; vertical-align: top; padding: 6px 8px; min-height: 60px; line-height: 1.6; font-size: 9.5pt; }
+        .confirm { font-weight: bold; font-size: 11pt; text-align: center; padding: 10px; }
+        .signature { border-bottom: 1px solid #000; min-height: 30px; }
+        @media print {
+            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .page { padding: 5mm; }
+            @page { size: A4 portrait; margin: 10mm; }
+        }
+        @media screen {
+            body { background: #eee; }
+            .page { background: #fff; max-width: 210mm; margin: 10mm auto; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
+        }
+    </style>
+</head>
+<body>
+${pages}
+<script>window.onload = function() { window.print(); };<\/script>
+</body>
+</html>`);
+                printWindow.document.close();
+            };
+
 
             // --- Supabase ヘルパー関数 ---
             const loadFromSupabase = async () => {
@@ -2501,14 +2649,22 @@ ${text}`;
                                                 <h3 className="font-bold text-green-700 flex items-center gap-2">
                                                     📋 作成済み達成度評価（{monthlyFormData.targetYear}年{monthlyFormData.targetMonth}月） — {filteredEvals.length}件
                                                 </h3>
-                                                <button
-                                                    onClick={() => {
-                                                        filteredEvals.forEach(evalData => exportSavedMonthlyExcel(evalData));
-                                                    }}
-                                                    className="btn btn-primary px-4 py-2 text-sm"
-                                                >
-                                                    <Icons.Download /> 全件ダウンロード
-                                                </button>
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        onClick={() => printAllMonthlyEvals(filteredEvals)}
+                                                        className="btn px-4 py-2 text-sm font-bold text-white shadow" style={{background: 'linear-gradient(135deg, #6366f1, #8b5cf6)'}}
+                                                    >
+                                                        🖨️ 一括印刷
+                                                    </button>
+                                                    <button
+                                                        onClick={() => {
+                                                            filteredEvals.forEach(evalData => exportSavedMonthlyExcel(evalData));
+                                                        }}
+                                                        className="btn btn-primary px-4 py-2 text-sm"
+                                                    >
+                                                        <Icons.Download /> 全件ダウンロード
+                                                    </button>
+                                                </div>
                                             </div>
                                             <div className="overflow-hidden rounded-lg border border-gray-200">
                                                 <table className="w-full text-left border-collapse">

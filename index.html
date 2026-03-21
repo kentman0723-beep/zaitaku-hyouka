@@ -446,16 +446,21 @@
 
                             if (headerRowIdx !== -1) {
                                 importedExcelData = [];
+                                let currentName = '';
                                 for (let i = headerRowIdx + 1; i < rawData.length; i++) {
                                     const r = rawData[i];
                                     if (!Array.isArray(r) || r.length === 0) continue;
+                                    
+                                    let cellName = String(r[nameColIdx] || '').trim();
+                                    if (cellName) currentName = cellName;
+
                                     importedExcelData.push({
-                                        '利用者名': String(r[nameColIdx] || ''),
+                                        '利用者名': currentName,
                                         'サービス提供状況': String(r[statusColIdx] || ''),
                                         '日付': String(r[dateColIdx] || '')
                                     });
                                 }
-                                console.log('インポートされたExcelデータ (ヘッダ識別成功):', importedExcelData);
+                                console.log('インポートされたExcelデータ (ヘッダ識別＆結合解消成功):', importedExcelData);
                             } else {
                                 console.warn('Excelファイルの連携ヘッダー行が見つかりませんでした');
                             }
@@ -543,22 +548,29 @@
                                 const statusStr = String(row['サービス提供状況']);
                                 if (!statusStr.includes('施設外就労')) return false;
                                 
-                                const dateStr = String(row['日付']).replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0));
+                                const dateStr = String(row['日付']).replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0)).trim();
 
                                 let rowMonth = -1;
                                 let rowDay = -1;
 
-                                // "02/17", "2026/02/17", "2026-02-17" などをカバー
-                                const matchSlash = dateStr.match(/(?:(?:\d{2,4})[-/／])?(\d{1,2})[-/／](\d{1,2})/);
-                                if (matchSlash) {
-                                    rowMonth = parseInt(matchSlash[1], 10);
-                                    rowDay = parseInt(matchSlash[2], 10);
+                                if (dateStr && !isNaN(dateStr) && Number(dateStr) > 40000) {
+                                    // Excelシリアル値からの変換（タイムゾーンの影響を避けるためUTCで取得）
+                                    const d = new Date(Math.round((Number(dateStr) - 25569) * 86400 * 1000));
+                                    rowMonth = d.getUTCMonth() + 1;
+                                    rowDay = d.getUTCDate();
                                 } else {
-                                    // "2月17日", "2026年2月17日" などをカバー
-                                    const matchJP = dateStr.match(/(?:(?:\d{2,4})\s*年\s*)?(\d{1,2})\s*月\s*(\d{1,2})\s*日/);
-                                    if (matchJP) {
-                                        rowMonth = parseInt(matchJP[1], 10);
-                                        rowDay = parseInt(matchJP[2], 10);
+                                    // "02/17", "2026/02/17", "2026-02-17" などをカバー
+                                    const matchSlash = dateStr.match(/(?:(?:\d{2,4})[-/／])?(\d{1,2})[-/／](\d{1,2})/);
+                                    if (matchSlash) {
+                                        rowMonth = parseInt(matchSlash[1], 10);
+                                        rowDay = parseInt(matchSlash[2], 10);
+                                    } else {
+                                        // "2月17日", "2026年2月17日" などをカバー
+                                        const matchJP = dateStr.match(/(?:(?:\d{2,4})\s*年\s*)?(\d{1,2})\s*月\s*(\d{1,2})\s*日/);
+                                        if (matchJP) {
+                                            rowMonth = parseInt(matchJP[1], 10);
+                                            rowDay = parseInt(matchJP[2], 10);
+                                        }
                                     }
                                 }
 

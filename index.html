@@ -630,8 +630,8 @@ ${condTexts.map((c, i) => `第${i+1}週: ${c}`).join('\n')}`;
                                 { key: 'workValidity', instruction: `以下の内容を元に、「在宅就労継続の妥当性」を1〜2文で作成してください。作業状況の確認と定期的な検討について書いてください。例：「在宅での作業状況を確認し、継続の妥当性について定期的に検討していく。」` }
                             ];
 
-                            // 利用可能なモデルリスト（優先順）
-                            const allModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-3-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash'];
+                            // 利用可能なモデルリスト（優先順・無料枠Flash系）
+                            const allModels = ['gemini-2.5-flash', 'gemini-3-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash'];
 
                             // 動作するモデルを特定（初回のみ）
                             if (!workingModelName) {
@@ -654,6 +654,40 @@ ${condTexts.map((c, i) => `第${i+1}週: ${c}`).join('\n')}`;
                                             rateLimitedModels.add(modelName);
                                             console.warn(`モデル ${modelName} をレート制限リストに追加`);
                                         }
+                                        // 404/NOT_FOUND は次のモデルへ自動スキップ
+                                    }
+                                }
+
+                                // 全モデル失敗時: APIから動的にモデル一覧取得
+                                if (!workingModelName) {
+                                    try {
+                                        console.log('全モデル失敗。APIから利用可能モデルを取得中...');
+                                        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${currentKey}`);
+                                        const data = await res.json();
+                                        if (data.models) {
+                                            const dynamicModels = data.models
+                                                .filter(m => m.supportedGenerationMethods && m.supportedGenerationMethods.includes('generateContent'))
+                                                .map(m => m.name.replace('models/', ''))
+                                                .filter(name => name.includes('gemini') && name.includes('flash'))
+                                                .slice(0, 5);
+                                            console.log('動的モデル候補:', dynamicModels);
+                                            for (const modelName of dynamicModels) {
+                                                try {
+                                                    const model = genAI.getGenerativeModel({ model: modelName });
+                                                    const testResult = await model.generateContent('テスト。「OK」とだけ返してください。');
+                                                    const testResponse = await testResult.response;
+                                                    if (testResponse.text()) {
+                                                        workingModelName = modelName;
+                                                        console.log(`動的モデル発見: ${workingModelName}`);
+                                                        break;
+                                                    }
+                                                } catch (e2) {
+                                                    console.warn(`動的モデル ${modelName} 失敗:`, e2.message);
+                                                }
+                                            }
+                                        }
+                                    } catch (fetchErr) {
+                                        console.error('モデル一覧取得エラー:', fetchErr);
                                     }
                                 }
                             }
@@ -1342,11 +1376,11 @@ ${text}`;
                 // 1. 優先モデルリスト (高速・高性能な順)
                 let modelsToTry = [
                     'gemini-2.5-flash',
+                    'gemini-3-flash',
                     'gemini-2.0-flash',
                     'gemini-2.0-flash-lite',
                     'gemini-1.5-flash',
-                    'gemini-1.5-flash-latest',
-                    'gemini-flash-latest'
+                    'gemini-1.5-flash-latest'
                 ];
 
                 let lastError = null;
@@ -2865,7 +2899,7 @@ ${text}`;
                                                     onClick={async () => {
                                                         try {
                                                             const genAI = new window.GoogleGenerativeAI(apiKey);
-                                                            const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+                                                            const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
                                                             const result = await model.generateContent('テスト。「OK」とだけ返してください。');
                                                             const response = await result.response;
                                                             if (response.text()) {

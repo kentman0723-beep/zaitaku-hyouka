@@ -925,7 +925,8 @@ ${baseContext}
                     });
 
                     const rateLimitInfo = rateLimitedModels.size > 0 ? `\nレート制限モデル: ${[...rateLimitedModels].join(', ')}` : '';
-                    const aiMsg = currentKey ? `\nAI生成: 成功${aiSuccessCount}件, 失敗${aiFailCount}件\nキー取得元: ${keySource}, モデル: ${workingModelName || '未検出'}${rateLimitInfo}${firstError ? '\nエラー: ' + firstError : ''}` : '\n⚠️ APIキー未設定のためAI生成はスキップされました';
+                    const errorInfo = (aiFailCount > 0 && firstError) ? '\nエラー: ' + firstError : '';
+                    const aiMsg = currentKey ? `\nAI生成: 成功${aiSuccessCount}件${aiFailCount > 0 ? ', 失敗' + aiFailCount + '件' : ''}\nモデル: ${workingModelName || '未検出'}${rateLimitInfo}${errorInfo}` : '\n⚠️ APIキー未設定のためAI生成はスキップされました';
                     alert(`${usersWithRecords.length}名分の${month}月達成度評価を自動作成しました。${aiMsg}\n下の一覧からExcelダウンロードできます。`);
                 } catch (err) {
                     console.error('一括作成エラー:', err);

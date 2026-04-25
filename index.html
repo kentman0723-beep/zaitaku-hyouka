@@ -631,7 +631,7 @@ ${condTexts.map((c, i) => `第${i+1}週: ${c}`).join('\n')}`;
                             ];
 
                             // 利用可能なモデルリスト（優先順・無料枠Flash系）
-                            const allModels = ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-2.5-flash', 'gemini-1.5-flash'];
+                            const allModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash'];
 
                             const variationSeed = Math.floor(Math.random() * 10000);
                             const batchPrompt = `あなたは障害福祉サービスの就労継続支援B型の支援員です。在宅における就労達成度評価シートの記入を行っています。
@@ -741,9 +741,13 @@ ${baseContext}
                                         console.warn(`AI生成エラー (${user.name}, model: ${modelName}):`, e.message);
                                         if (!firstError) firstError = e.message;
 
-                                        if (e.message && (e.message.includes('429') || e.message.includes('quota') || e.message.includes('RESOURCE_EXHAUSTED'))) {
+                                        const errMsg = e.message || '';
+                                        if (errMsg.includes('429') || errMsg.includes('quota') || errMsg.includes('RESOURCE_EXHAUSTED')) {
                                             rateLimitedModels.add(modelName);
                                             console.warn(`モデル ${modelName} をレート制限リストに追加`);
+                                        } else if (errMsg.includes('400') || errMsg.includes('API_KEY_INVALID') || errMsg.includes('expired') || errMsg.includes('403')) {
+                                            rateLimitedModels.add(modelName);
+                                            console.warn(`モデル ${modelName} をエラーリストに追加 (400/403/expired)`);
                                         }
                                         // 他のエラーも次のモデルへ自動フォールバック
                                     }
@@ -752,7 +756,7 @@ ${baseContext}
                                 // SDK全滅時: REST API直接呼び出しフォールバック
                                 if (!generated) {
                                     console.log('SDK全モデル失敗。REST API直接呼び出しを試行...');
-                                    const restModels = ['gemini-2.0-flash', 'gemini-2.0-flash-lite'];
+                                    const restModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite'];
                                     for (const modelName of restModels) {
                                         try {
                                             const restRes = await fetch(
@@ -810,12 +814,66 @@ ${baseContext}
                                     }
                                 }
 
+                                // レート制限で全滅した場合: 10秒待ってからリトライ
+                                if (!generated && rateLimitedModels.size > 0) {
+                                    console.log('全モデルが制限中。10秒待機後にリトライ...');
+                                    await new Promise(resolve => setTimeout(resolve, 10000));
+                                    rateLimitedModels.clear();
+
+                                    for (const modelName of allModels) {
+                                        if (generated) break;
+                                        try {
+                                            console.log(`リトライ: ${user.name} (model: ${modelName})`);
+                                            const genAI = new window.GoogleGenerativeAI(currentKey);
+                                            const model = genAI.getGenerativeModel({ model: modelName });
+                                            const result = await model.generateContent(batchPrompt);
+                                            const response = await result.response;
+                                            const fullText = response.text();
+
+                                            workingModelName = modelName;
+                                            if (fullText && fullText.trim()) {
+                                                const parseSection = (text, startTag, endTags) => {
+                                                    const startIdx = text.indexOf(startTag);
+                                                    if (startIdx === -1) return '';
+                                                    const afterStart = text.substring(startIdx + startTag.length);
+                                                    let endIdx = afterStart.length;
+                                                    for (const tag of endTags) {
+                                                        const idx = afterStart.indexOf(tag);
+                                                        if (idx !== -1 && idx < endIdx) endIdx = idx;
+                                                    }
+                                                    return afterStart.substring(0, endIdx).trim();
+                                                };
+
+                                                const aiTrainingGoal = parseSection(fullText, '【訓練目標】', ['【取組内容】', '【達成度】', '【課題】', '【改善方針】', '【健康面】', '【その他】', '【妥当性】']);
+                                                const aiActivities = parseSection(fullText, '【取組内容】', ['【達成度】', '【課題】', '【改善方針】', '【健康面】', '【その他】', '【妥当性】']);
+                                                const aiAchievement = parseSection(fullText, '【達成度】', ['【課題】', '【改善方針】', '【健康面】', '【その他】', '【妥当性】']);
+                                                issues = parseSection(fullText, '【課題】', ['【改善方針】', '【健康面】', '【その他】', '【妥当性】']);
+                                                improvementPlan = parseSection(fullText, '【改善方針】', ['【健康面】', '【その他】', '【妥当性】']);
+                                                healthNotes = parseSection(fullText, '【健康面】', ['【その他】', '【妥当性】']);
+                                                otherNotes = parseSection(fullText, '【その他】', ['【妥当性】']);
+                                                workValidity = parseSection(fullText, '【妥当性】', []);
+
+                                                if (aiTrainingGoal) trainingGoal = aiTrainingGoal;
+                                                if (aiActivities) activities = aiActivities;
+                                                if (aiAchievement) achievement = aiAchievement;
+
+                                                const fieldsGenerated = [trainingGoal, activities, achievement, issues, improvementPlan, healthNotes, otherNotes, workValidity].filter(f => f).length;
+                                                aiSuccessCount += fieldsGenerated;
+                                                aiFailCount += (8 - fieldsGenerated);
+                                                generated = true;
+                                            }
+                                        } catch (retryErr) {
+                                            console.warn(`リトライ失敗 (${modelName}):`, retryErr.message);
+                                        }
+                                    }
+                                }
+
                                 if (!generated) {
                                     aiFailCount += 8;
                                 }
 
-                                // レート制限回避のため2秒待機
-                                await new Promise(resolve => setTimeout(resolve, 2000));
+                                // レート制限回避のため3秒待機
+                                await new Promise(resolve => setTimeout(resolve, 3000));
                             }
                         } else {
                             console.warn(`AI生成スキップ: currentKey=${!!currentKey}, trainingGoal=${trainingGoal}`);

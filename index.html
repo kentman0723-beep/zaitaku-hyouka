@@ -631,76 +631,10 @@ ${condTexts.map((c, i) => `第${i+1}週: ${c}`).join('\n')}`;
                             ];
 
                             // 利用可能なモデルリスト（優先順・無料枠Flash系）
-                            const allModels = ['gemini-2.5-flash', 'gemini-3-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash'];
+                            const allModels = ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-2.5-flash', 'gemini-1.5-flash'];
 
-                            // 動作するモデルを特定（初回のみ）
-                            if (!workingModelName) {
-                                const genAI = new window.GoogleGenerativeAI(currentKey);
-                                for (const modelName of allModels) {
-                                    if (rateLimitedModels.has(modelName)) continue;
-                                    try {
-                                        console.log(`モデルテスト: ${modelName}`);
-                                        const model = genAI.getGenerativeModel({ model: modelName });
-                                        const testResult = await model.generateContent('テスト。「OK」とだけ返してください。');
-                                        const testResponse = await testResult.response;
-                                        if (testResponse.text()) {
-                                            workingModelName = modelName;
-                                            console.log(`動作するモデル発見: ${workingModelName}`);
-                                            break;
-                                        }
-                                    } catch (e) {
-                                        console.warn(`モデル ${modelName} 失敗:`, e.message);
-                                        if (e.message && (e.message.includes('429') || e.message.includes('quota') || e.message.includes('RESOURCE_EXHAUSTED'))) {
-                                            rateLimitedModels.add(modelName);
-                                            console.warn(`モデル ${modelName} をレート制限リストに追加`);
-                                        }
-                                        // 404/NOT_FOUND は次のモデルへ自動スキップ
-                                    }
-                                }
-
-                                // 全モデル失敗時: APIから動的にモデル一覧取得
-                                if (!workingModelName) {
-                                    try {
-                                        console.log('全モデル失敗。APIから利用可能モデルを取得中...');
-                                        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${currentKey}`);
-                                        const data = await res.json();
-                                        if (data.models) {
-                                            const dynamicModels = data.models
-                                                .filter(m => m.supportedGenerationMethods && m.supportedGenerationMethods.includes('generateContent'))
-                                                .map(m => m.name.replace('models/', ''))
-                                                .filter(name => name.includes('gemini') && name.includes('flash'))
-                                                .slice(0, 5);
-                                            console.log('動的モデル候補:', dynamicModels);
-                                            for (const modelName of dynamicModels) {
-                                                try {
-                                                    const model = genAI.getGenerativeModel({ model: modelName });
-                                                    const testResult = await model.generateContent('テスト。「OK」とだけ返してください。');
-                                                    const testResponse = await testResult.response;
-                                                    if (testResponse.text()) {
-                                                        workingModelName = modelName;
-                                                        console.log(`動的モデル発見: ${workingModelName}`);
-                                                        break;
-                                                    }
-                                                } catch (e2) {
-                                                    console.warn(`動的モデル ${modelName} 失敗:`, e2.message);
-                                                }
-                                            }
-                                        }
-                                    } catch (fetchErr) {
-                                        console.error('モデル一覧取得エラー:', fetchErr);
-                                    }
-                                }
-                            }
-
-                            if (!workingModelName) {
-                                console.warn(`${user.name}: モデル未検出のためAI生成スキップ`);
-                            } else {
-                                // 1回のAPI呼び出しで5つの項目を一括生成（フォールバック付き）
-                                const genAI = new window.GoogleGenerativeAI(currentKey);
-                                let generated = false;
-
-                                const variationSeed = Math.floor(Math.random() * 10000);
-                                const batchPrompt = `あなたは障害福祉サービスの就労継続支援B型の支援員です。在宅における就労達成度評価シートの記入を行っています。
+                            const variationSeed = Math.floor(Math.random() * 10000);
+                            const batchPrompt = `あなたは障害福祉サービスの就労継続支援B型の支援員です。在宅における就労達成度評価シートの記入を行っています。
 
 以下の利用者の各週の評価データをもとに、月単位の総合評価として8つの項目をそれぞれ作成してください。
 週評価のデータをそのまま転記するのではなく、ひと月分を総合的にまとめた評価文を作成してください。
@@ -742,28 +676,35 @@ ${baseContext}
 【妥当性】
 在宅就労継続の妥当性を1〜2文で。その月の作業実績を踏まえて書いてください。（参考例：作業への取り組み状況から在宅就労の継続は妥当と考えられ、引き続き状況を確認していく。）`;
 
-                                // 現在のモデルから開始し、429エラーなら別モデルへフォールバック
-                                let currentModelName = workingModelName;
+                            // テスト呼び出しなしで直接本番生成（モデル順次試行）
+                            {
+                                let generated = false;
                                 let attemptCount = 0;
-                                const maxTotalAttempts = allModels.length * 2; // 全モデル×2回まで
 
-                                while (!generated && attemptCount < maxTotalAttempts) {
+                                // SDK経由での試行
+                                const modelsToAttempt = workingModelName
+                                    ? [workingModelName, ...allModels.filter(m => m !== workingModelName)]
+                                    : [...allModels];
+
+                                for (const modelName of modelsToAttempt) {
+                                    if (generated) break;
+                                    if (rateLimitedModels.has(modelName)) continue;
                                     attemptCount++;
-                                    try {
-                                        if (attemptCount > 1) {
-                                            const retryWait = 3000;
-                                            await new Promise(resolve => setTimeout(resolve, retryWait));
-                                        }
 
-                                        console.log(`AI一括生成中: ${user.name} (model: ${currentModelName}, attempt: ${attemptCount})`);
-                                        const model = genAI.getGenerativeModel({ model: currentModelName });
+                                    if (attemptCount > 1) {
+                                        await new Promise(resolve => setTimeout(resolve, 2000));
+                                    }
+
+                                    try {
+                                        console.log(`AI生成中: ${user.name} (model: ${modelName}, attempt: ${attemptCount})`);
+                                        const genAI = new window.GoogleGenerativeAI(currentKey);
+                                        const model = genAI.getGenerativeModel({ model: modelName });
                                         const result = await model.generateContent(batchPrompt);
                                         const response = await result.response;
                                         const fullText = response.text();
-                                        console.log(`AI一括生成完了: ${user.name}, モデル: ${currentModelName}, 文字数: ${fullText.length}`);
+                                        console.log(`AI生成完了: ${user.name}, モデル: ${modelName}, 文字数: ${fullText.length}`);
 
-                                        // 成功したモデルを記録
-                                        workingModelName = currentModelName;
+                                        workingModelName = modelName;
 
                                         if (fullText && fullText.trim()) {
                                             const parseSection = (text, startTag, endTags) => {
@@ -787,7 +728,6 @@ ${baseContext}
                                             otherNotes = parseSection(fullText, '【その他】', ['【妥当性】']);
                                             workValidity = parseSection(fullText, '【妥当性】', []);
 
-                                            // AI生成が成功した場合、月間総合評価で上書き
                                             if (aiTrainingGoal) trainingGoal = aiTrainingGoal;
                                             if (aiActivities) activities = aiActivities;
                                             if (aiAchievement) achievement = aiAchievement;
@@ -798,28 +738,80 @@ ${baseContext}
                                             generated = true;
                                         }
                                     } catch (e) {
-                                        const isRateLimit = e.message && (e.message.includes('429') || e.message.includes('quota') || e.message.includes('RESOURCE_EXHAUSTED'));
-                                        console.warn(`AI生成エラー (${user.name}, model: ${currentModelName}, attempt ${attemptCount}):`, e.message);
+                                        console.warn(`AI生成エラー (${user.name}, model: ${modelName}):`, e.message);
                                         if (!firstError) firstError = e.message;
 
-                                        if (isRateLimit) {
-                                            // レート制限 → このモデルを記録して次のモデルへフォールバック
-                                            rateLimitedModels.add(currentModelName);
-                                            console.warn(`🔄 モデル ${currentModelName} がレート制限。別モデルへフォールバック...`);
-                                            const nextModel = allModels.find(m => !rateLimitedModels.has(m));
-                                            if (nextModel) {
-                                                currentModelName = nextModel;
-                                                workingModelName = nextModel;
-                                                console.log(`➡️ フォールバック先: ${nextModel}`);
-                                            } else {
-                                                console.error('❌ 全モデルがレート制限に達しました');
-                                                aiFailCount += 8;
+                                        if (e.message && (e.message.includes('429') || e.message.includes('quota') || e.message.includes('RESOURCE_EXHAUSTED'))) {
+                                            rateLimitedModels.add(modelName);
+                                            console.warn(`モデル ${modelName} をレート制限リストに追加`);
+                                        }
+                                        // 他のエラーも次のモデルへ自動フォールバック
+                                    }
+                                }
+
+                                // SDK全滅時: REST API直接呼び出しフォールバック
+                                if (!generated) {
+                                    console.log('SDK全モデル失敗。REST API直接呼び出しを試行...');
+                                    const restModels = ['gemini-2.0-flash', 'gemini-2.0-flash-lite'];
+                                    for (const modelName of restModels) {
+                                        try {
+                                            const restRes = await fetch(
+                                                `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${currentKey}`,
+                                                {
+                                                    method: 'POST',
+                                                    headers: { 'Content-Type': 'application/json' },
+                                                    body: JSON.stringify({
+                                                        contents: [{ parts: [{ text: batchPrompt }] }]
+                                                    })
+                                                }
+                                            );
+                                            const restData = await restRes.json();
+                                            const fullText = restData?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+                                            console.log(`REST API成功: ${user.name}, モデル: ${modelName}, 文字数: ${fullText.length}`);
+
+                                            workingModelName = modelName + ' (REST)';
+
+                                            if (fullText && fullText.trim()) {
+                                                const parseSection = (text, startTag, endTags) => {
+                                                    const startIdx = text.indexOf(startTag);
+                                                    if (startIdx === -1) return '';
+                                                    const afterStart = text.substring(startIdx + startTag.length);
+                                                    let endIdx = afterStart.length;
+                                                    for (const tag of endTags) {
+                                                        const idx = afterStart.indexOf(tag);
+                                                        if (idx !== -1 && idx < endIdx) endIdx = idx;
+                                                    }
+                                                    return afterStart.substring(0, endIdx).trim();
+                                                };
+
+                                                const aiTrainingGoal = parseSection(fullText, '【訓練目標】', ['【取組内容】', '【達成度】', '【課題】', '【改善方針】', '【健康面】', '【その他】', '【妥当性】']);
+                                                const aiActivities = parseSection(fullText, '【取組内容】', ['【達成度】', '【課題】', '【改善方針】', '【健康面】', '【その他】', '【妥当性】']);
+                                                const aiAchievement = parseSection(fullText, '【達成度】', ['【課題】', '【改善方針】', '【健康面】', '【その他】', '【妥当性】']);
+                                                issues = parseSection(fullText, '【課題】', ['【改善方針】', '【健康面】', '【その他】', '【妥当性】']);
+                                                improvementPlan = parseSection(fullText, '【改善方針】', ['【健康面】', '【その他】', '【妥当性】']);
+                                                healthNotes = parseSection(fullText, '【健康面】', ['【その他】', '【妥当性】']);
+                                                otherNotes = parseSection(fullText, '【その他】', ['【妥当性】']);
+                                                workValidity = parseSection(fullText, '【妥当性】', []);
+
+                                                if (aiTrainingGoal) trainingGoal = aiTrainingGoal;
+                                                if (aiActivities) activities = aiActivities;
+                                                if (aiAchievement) achievement = aiAchievement;
+
+                                                const fieldsGenerated = [trainingGoal, activities, achievement, issues, improvementPlan, healthNotes, otherNotes, workValidity].filter(f => f).length;
+                                                aiSuccessCount += fieldsGenerated;
+                                                aiFailCount += (8 - fieldsGenerated);
+                                                generated = true;
                                                 break;
                                             }
-                                        } else if (attemptCount >= maxTotalAttempts) {
-                                            aiFailCount += 8;
+                                        } catch (restErr) {
+                                            console.warn(`REST API失敗 (${modelName}):`, restErr.message);
+                                            if (!firstError) firstError = restErr.message;
                                         }
                                     }
+                                }
+
+                                if (!generated) {
+                                    aiFailCount += 8;
                                 }
 
                                 // レート制限回避のため2秒待機

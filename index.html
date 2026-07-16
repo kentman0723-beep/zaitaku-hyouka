@@ -411,6 +411,10 @@
             const [monthlyExcelFile, setMonthlyExcelFile] = useState(null);
             const [bulkCreating, setBulkCreating] = useState(false);
 
+            // --- 達成度評価 編集用 State ---
+            const [editingMonthlyEvalId, setEditingMonthlyEvalId] = useState(null);
+            const [editMonthlyEvalData, setEditMonthlyEvalData] = useState(null);
+
             // --- 全利用者の達成度評価を一括自動作成 ---
             const autoCreateAllMonthlyEvaluations = async () => {
                 setBulkCreating(true);
@@ -954,6 +958,29 @@ ${baseContext}
                 if (confirm('この達成度評価を削除しますか？')) {
                     setSavedMonthlyEvals(prev => prev.filter(e => e.id !== evalId));
                 }
+            };
+
+            // --- 達成度評価の編集 ---
+            const startEditMonthlyEval = (evalData) => {
+                setEditingMonthlyEvalId(evalData.id);
+                setEditMonthlyEvalData({ ...evalData });
+            };
+
+            const cancelEditMonthlyEval = () => {
+                setEditingMonthlyEvalId(null);
+                setEditMonthlyEvalData(null);
+            };
+
+            const saveEditMonthlyEval = () => {
+                if (!editMonthlyEvalData) return;
+                setSavedMonthlyEvals(prev => prev.map(e => e.id === editingMonthlyEvalId ? { ...editMonthlyEvalData, updatedAt: new Date().toISOString() } : e));
+                setEditingMonthlyEvalId(null);
+                setEditMonthlyEvalData(null);
+                alert('✅ 達成度評価を更新しました。');
+            };
+
+            const updateEditField = (field, value) => {
+                setEditMonthlyEvalData(prev => ({ ...prev, [field]: value }));
             };
 
             // --- 達成度評価の一括印刷 ---
@@ -2864,6 +2891,12 @@ ${text}`;
                                                                     <td className="p-3 text-xs text-gray-400">{evalData.createdAt ? new Date(evalData.createdAt).toLocaleString('ja-JP') : ''}</td>
                                                                     <td className="p-3 text-right flex justify-end gap-2">
                                                                         <button
+                                                                            onClick={() => startEditMonthlyEval(evalData)}
+                                                                            className="text-amber-600 hover:underline text-sm font-bold"
+                                                                        >
+                                                                            ✏️ 編集
+                                                                        </button>
+                                                                        <button
                                                                             onClick={() => printAllMonthlyEvals([evalData])}
                                                                             className="text-indigo-600 hover:underline text-sm font-bold"
                                                                         >
@@ -2892,6 +2925,93 @@ ${text}`;
                                         </div>
                                     );
                                 })()}
+
+                                {/* --- 達成度評価 編集モーダル --- */}
+                                {editingMonthlyEvalId && editMonthlyEvalData && (
+                                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={(e) => { if (e.target === e.currentTarget) cancelEditMonthlyEval(); }}>
+                                        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto" style={{animation: 'fadeIn 0.2s ease-out'}}>
+                                            <div className="sticky top-0 bg-white border-b px-6 py-4 rounded-t-2xl flex justify-between items-center z-10">
+                                                <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                                                    <span className="bg-amber-500 w-2 h-6 rounded-full inline-block"></span>
+                                                    達成度評価を編集
+                                                    <span className="text-sm font-normal text-gray-500 ml-2">
+                                                        {(() => { const u = users.find(u => u.id === editMonthlyEvalData.userId); return u ? u.name : ''; })()}
+                                                        （{editMonthlyEvalData.targetYear}年{editMonthlyEvalData.targetMonth}月）
+                                                    </span>
+                                                </h3>
+                                                <button onClick={cancelEditMonthlyEval} className="text-gray-400 hover:text-gray-600 transition text-2xl leading-none">&times;</button>
+                                            </div>
+                                            <div className="p-6 space-y-5">
+                                                {/* 実施日・時間・方法 */}
+                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                                    <div>
+                                                        <label className="block text-sm font-bold text-gray-600 mb-1">実施日</label>
+                                                        <input type="date" className="input-field" value={editMonthlyEvalData.implementationDate || ''} onChange={e => updateEditField('implementationDate', e.target.value)} />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-sm font-bold text-gray-600 mb-1">開始時間</label>
+                                                        <input type="time" className="input-field" value={editMonthlyEvalData.timeStart || ''} onChange={e => updateEditField('timeStart', e.target.value)} />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-sm font-bold text-gray-600 mb-1">終了時間</label>
+                                                        <input type="time" className="input-field" value={editMonthlyEvalData.timeEnd || ''} onChange={e => updateEditField('timeEnd', e.target.value)} />
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-sm font-bold text-gray-600 mb-1">実施方法</label>
+                                                    <div className="flex flex-wrap gap-3">
+                                                        {[{key:'line',label:'LINE'},{key:'discord',label:'Discord'},{key:'googleForm',label:'Googleフォーム'},{key:'phone',label:'電話'},{key:'visit',label:'訪問'},{key:'commute',label:'通所'},{key:'other',label:'その他'}].map(m => (
+                                                            <label key={m.key} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg cursor-pointer border transition text-sm ${editMonthlyEvalData.method === m.key ? 'bg-amber-50 border-amber-400 text-amber-700 font-bold' : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'}`}>
+                                                                <input type="radio" name="editMethod" value={m.key} checked={editMonthlyEvalData.method === m.key} onChange={e => updateEditField('method', e.target.value)} className="hidden" />
+                                                                {editMonthlyEvalData.method === m.key ? '☑' : '□'} {m.label}
+                                                            </label>
+                                                        ))}
+                                                    </div>
+                                                </div>
+
+                                                {/* テキストフィールド群 */}
+                                                {[
+                                                    { key: 'trainingGoal', label: '訓練目標', rows: 4 },
+                                                    { key: 'activities', label: '取組内容', rows: 4 },
+                                                    { key: 'achievement', label: '訓練目標に対する達成度', rows: 4 },
+                                                    { key: 'issues', label: '課題', rows: 3 },
+                                                    { key: 'improvementPlan', label: '今後における課題の改善方針', rows: 3 },
+                                                    { key: 'healthNotes', label: '健康・体調面での留意事項', rows: 3 },
+                                                    { key: 'otherNotes', label: 'その他特記事項', rows: 2 },
+                                                    { key: 'workValidity', label: '在宅就労継続の妥当性', rows: 2 }
+                                                ].map(field => (
+                                                    <div key={field.key}>
+                                                        <label className="block text-sm font-bold text-gray-600 mb-1">{field.label}</label>
+                                                        <textarea
+                                                            className="input-field resize-y"
+                                                            rows={field.rows}
+                                                            value={editMonthlyEvalData[field.key] || ''}
+                                                            onChange={e => updateEditField(field.key, e.target.value)}
+                                                        />
+                                                    </div>
+                                                ))}
+
+                                                {/* 評価実施者・前回評価日 */}
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    <div>
+                                                        <label className="block text-sm font-bold text-gray-600 mb-1">評価実施者</label>
+                                                        <input type="text" className="input-field" value={editMonthlyEvalData.evaluator || ''} onChange={e => updateEditField('evaluator', e.target.value)} />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-sm font-bold text-gray-600 mb-1">前回の達成度評価日</label>
+                                                        <input type="date" className="input-field" value={editMonthlyEvalData.previousEvalDate || ''} onChange={e => updateEditField('previousEvalDate', e.target.value)} />
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* フッター */}
+                                            <div className="sticky bottom-0 bg-white border-t px-6 py-4 rounded-b-2xl flex justify-end gap-3">
+                                                <button onClick={cancelEditMonthlyEval} className="btn btn-ghost px-6 py-2.5">キャンセル</button>
+                                                <button onClick={saveEditMonthlyEval} className="btn px-8 py-2.5 text-white font-bold shadow-lg" style={{background: 'linear-gradient(135deg, #f59e0b, #d97706)'}}>✅ 保存する</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
 
                             </div>
                         )}

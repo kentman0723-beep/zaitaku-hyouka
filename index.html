@@ -415,6 +415,51 @@
             const [editingMonthlyEvalId, setEditingMonthlyEvalId] = useState(null);
             const [editMonthlyEvalData, setEditMonthlyEvalData] = useState(null);
 
+            // --- 個別 週評価作成モーダル State ---
+            const [showIndividualWeeklyModal, setShowIndividualWeeklyModal] = useState(false);
+            const [individualWeeklyData, setIndividualWeeklyData] = useState({
+                userId: '',
+                implementationDate: new Date().toISOString().split('T')[0],
+                previousDate: '',
+                periodStart: '',
+                periodEnd: '',
+                selectedMethod: 'commute',
+                condition: '',
+                workContent: '',
+                goals: '',
+                recorder: '',
+                manager: '近藤恵子'
+            });
+            const [individualWeeklyLoading, setIndividualWeeklyLoading] = useState({
+                condition: false,
+                workContent: false,
+                goals: false
+            });
+
+            // --- 個別 達成度評価作成モーダル State ---
+            const [showIndividualMonthlyModal, setShowIndividualMonthlyModal] = useState(false);
+            const [individualMonthlyData, setIndividualMonthlyData] = useState({
+                userId: '',
+                targetYear: now.getFullYear(),
+                targetMonth: now.getMonth() + 1,
+                implementationDate: now.toISOString().split('T')[0],
+                timeStart: '10:00',
+                timeEnd: '10:15',
+                method: 'commute',
+                methodOther: '',
+                trainingGoal: '',
+                activities: '',
+                achievement: '',
+                issues: '',
+                improvementPlan: '',
+                healthNotes: '',
+                otherNotes: '',
+                workValidity: '',
+                evaluator: '近藤恵子',
+                previousEvalDate: ''
+            });
+            const [individualMonthlyLoading, setIndividualMonthlyLoading] = useState(false);
+
             // --- 全利用者の達成度評価を一括自動作成 ---
             const autoCreateAllMonthlyEvaluations = async () => {
                 setBulkCreating(true);
@@ -1588,6 +1633,316 @@ ${text}`;
                 }
             };
 
+            // --- 個別 週評価の日付変更ハンドラ ---
+            const handleIndividualWeeklyDateChange = (date) => {
+                let newData = { ...individualWeeklyData, implementationDate: date };
+                if (individualWeeklyData.userId) {
+                    const userRecords = records
+                        .filter(r => r.userId === individualWeeklyData.userId && new Date(r.implementationDate) < new Date(date))
+                        .sort((a, b) => new Date(b.implementationDate) - new Date(a.implementationDate));
+                    if (userRecords.length > 0) {
+                        newData.previousDate = userRecords[0].implementationDate;
+                    } else {
+                        const prev = new Date(date);
+                        prev.setDate(prev.getDate() - 7);
+                        newData.previousDate = prev.toISOString().split('T')[0];
+                    }
+                    const implDateObj = new Date(date);
+                    const day = implDateObj.getDay();
+                    const diffToMon = (day === 0 ? -6 : 1) - day;
+                    const thisMon = new Date(implDateObj);
+                    thisMon.setDate(implDateObj.getDate() + diffToMon);
+                    const lastMon = new Date(thisMon);
+                    lastMon.setDate(thisMon.getDate() - 7);
+                    const lastSun = new Date(lastMon);
+                    lastSun.setDate(lastMon.getDate() + 6);
+                    newData.periodStart = lastMon.toISOString().split('T')[0];
+                    newData.periodEnd = lastSun.toISOString().split('T')[0];
+                }
+                setIndividualWeeklyData(newData);
+            };
+
+            // --- 個別 週評価のユーザー変更ハンドラ ---
+            const handleIndividualWeeklyUserChange = (uid) => {
+                const newData = { ...individualWeeklyData, userId: uid };
+                setIndividualWeeklyData(newData);
+                // ユーザー変更時に日付も再計算
+                if (uid) {
+                    setTimeout(() => {
+                        handleIndividualWeeklyDateChange(individualWeeklyData.implementationDate);
+                    }, 0);
+                }
+            };
+
+            // --- 個別 週評価 AI生成 ---
+            const generateIndividualWeeklyContent = async (targetField) => {
+                const currentKey = apiKey || MANUAL_API_KEY;
+                if (!currentKey) {
+                    alert('AI機能を使用するには、設定からAPIキーを登録してください。');
+                    return;
+                }
+                const currentText = individualWeeklyData[targetField];
+                if (!currentText) { alert('キーワードを入力してからボタンを押してください。'); return; }
+
+                setIndividualWeeklyLoading(prev => ({ ...prev, [targetField]: true }));
+
+                let instruction = "";
+                if (targetField === 'condition') {
+                    instruction = "入力されたキーワードを元に、「体調について」の週評価報告文章を2〜3文程度で簡潔に作成してください。支援員が聞き取りを行い、利用者の1週間の健康状態や睡眠、服薬状況などを評価した記録です。「本日」ではなく「今週」「この1週間」という視点で記述してください。福祉支援記録として適切な「です・ます」調の文章にしてください。";
+                } else if (targetField === 'workContent') {
+                    instruction = "入力されたキーワードを元に、「1週間の在宅での作業内容について」の週評価報告文章を2〜3文程度で簡潔に作成してください。支援員が利用者に聞き取りを行い、1週間を通しての作業状況を評価した記録です。「本日」ではなく「今週」「この1週間」という視点で記述してください。福祉支援記録として適切な「です・ます」調の文章にしてください。";
+                } else if (targetField === 'goals') {
+                    instruction = "入力されたキーワードを元に、「今後の目標」の週評価報告文章を2〜3文程度で簡潔に作成してください。支援員が利用者との聞き取りを踏まえ、来週に向けた目標を記録したものです。福祉支援記録として適切な「です・ます」調の文章にしてください。";
+                }
+
+                const systemPrompt = `あなたは障害福祉サービスの就労継続支援B型の支援員です。
+利用者への聞き取りを元に、週評価の報告文章を作成してください。
+これは「週評価」であり、1週間を通しての状況を支援員がまとめた記録です。
+「本日」「今日」という表現は使わず、「今週」「この1週間」という視点で書いてください。
+【指示】
+${instruction}
+出力は作成した文章のみを行ってください（JSONではなく、プレーンテキストで出力）。文章は2〜3文に収めてください。`;
+
+                try {
+                    const text = await generateGeminiContent(systemPrompt, currentText, currentKey, (status) => {
+                        console.log(status);
+                    });
+                    if (text) {
+                        setIndividualWeeklyData(prev => ({ ...prev, [targetField]: text.trim() }));
+                    }
+                } catch (e) {
+                    console.error("AI Generation Error:", e);
+                } finally {
+                    setIndividualWeeklyLoading(prev => ({ ...prev, [targetField]: false }));
+                }
+            };
+
+            // --- 個別 週評価の保存 ---
+            const saveIndividualWeeklyRecord = () => {
+                if (!individualWeeklyData.userId) { alert('利用者を選択してください'); return; }
+                if (!individualWeeklyData.recorder) { alert('記録者を入力してください'); return; }
+
+                const isDuplicate = records.some(r =>
+                    r.userId === individualWeeklyData.userId &&
+                    r.periodStart === individualWeeklyData.periodStart &&
+                    r.periodEnd === individualWeeklyData.periodEnd
+                );
+                if (isDuplicate) {
+                    const user = users.find(u => u.id === individualWeeklyData.userId);
+                    const userName = user ? user.name : 'この利用者';
+                    alert(`${userName}さんのこの期間（${individualWeeklyData.periodStart} ～ ${individualWeeklyData.periodEnd}）の週評価は既に存在します。\n重複して作成することはできません。`);
+                    return;
+                }
+
+                const newRecord = { ...individualWeeklyData, id: generateId() };
+                setRecords([newRecord, ...records]);
+                alert('✅ 週評価を保存しました');
+                setShowIndividualWeeklyModal(false);
+                setIndividualWeeklyData({
+                    userId: '', implementationDate: new Date().toISOString().split('T')[0],
+                    previousDate: '', periodStart: '', periodEnd: '',
+                    selectedMethod: 'commute', condition: '', workContent: '',
+                    goals: '', recorder: '', manager: '近藤恵子'
+                });
+            };
+
+            // --- 個別 達成度評価のAI一括生成 ---
+            const generateIndividualMonthlyAI = async () => {
+                const currentKey = apiKey || MANUAL_API_KEY;
+                if (!currentKey) {
+                    alert('AI機能を使用するには、設定からAPIキーを登録してください。');
+                    return;
+                }
+                if (!individualMonthlyData.userId) {
+                    alert('利用者を選択してください。');
+                    return;
+                }
+
+                const year = individualMonthlyData.targetYear;
+                const month = individualMonthlyData.targetMonth;
+                const user = users.find(u => u.id === individualMonthlyData.userId);
+                if (!user) { alert('利用者が見つかりません'); return; }
+
+                const userRecords = records.filter(r => {
+                    if (r.userId !== user.id) return false;
+                    const d = new Date(r.implementationDate);
+                    return d.getFullYear() === year && (d.getMonth() + 1) === month;
+                }).sort((a, b) => new Date(a.implementationDate) - new Date(b.implementationDate));
+
+                if (userRecords.length === 0) {
+                    alert(`${user.name}さんの${year}年${month}月の週評価データがありません。\n先に週評価を作成してください。`);
+                    return;
+                }
+
+                setIndividualMonthlyLoading(true);
+                const goalTexts = userRecords.map(r => r.goals).filter(Boolean);
+                const workTexts = userRecords.map(r => r.workContent).filter(Boolean);
+                const condTexts = userRecords.map(r => r.condition).filter(Boolean);
+
+                const baseContext = `
+利用者: ${user.name}
+
+以下は各週の週評価データです。これらを参考にして月単位の総合評価を作成してください。
+
+＜週ごとの訓練目標＞
+${goalTexts.map((g, i) => `第${i+1}週: ${g}`).join('\n')}
+
+＜週ごとの取組内容＞
+${workTexts.map((w, i) => `第${i+1}週: ${w}`).join('\n')}
+
+＜週ごとの体調・状況＞
+${condTexts.map((c, i) => `第${i+1}週: ${c}`).join('\n')}`;
+
+                const variationSeed = Math.floor(Math.random() * 10000);
+                const batchPrompt = `あなたは障害福祉サービスの就労継続支援B型の支援員です。在宅における就労達成度評価シートの記入を行っています。
+
+以下の利用者の各週の評価データをもとに、月単位の総合評価として8つの項目をそれぞれ作成してください。
+週評価のデータをそのまま転記するのではなく、ひと月分を総合的にまとめた評価文を作成してください。
+各項目は【項目名】で区切って出力してください。出力はプレーンテキストのみ。
+
+【重要：言い回しの多様化ルール】
+毎月同じ文面にならないよう、以下を必ず守ってください：
+- 文の構成、語順、接続詞、動詞の選び方、文末表現を毎回変えてください。
+- 利用者ごとの個別の週評価内容を具体的に反映した、オリジナルの文章を作成してください。
+- バリエーションシード: ${variationSeed}
+
+【厳守：季節感のある表現の禁止】
+季節・気候・時期を特定できる表現は一切使用しないでください。
+
+${baseContext}
+
+以下の8項目を作成してください：
+
+【訓練目標】
+各週の訓練目標を総合的にまとめ、ひと月全体の訓練目標として3〜5文で作成してください。
+
+【取組内容】
+各週の取組内容を元に、ひと月間の取り組みを総合的にまとめた評価文を3〜5文で作成してください。
+
+【達成度】
+各週の状況・体調データを元に、ひと月間の訓練目標に対する達成度を3〜5文で総合評価してください。
+
+【課題】
+在宅就労における課題を1〜2文で。支援の視点から書いてください。
+
+【改善方針】
+今後における課題の改善方針を1〜2文で。段階的な支援と職員間の連携を含めてください。
+
+【健康面】
+健康・体調面での留意事項を2〜3文で。面会、LINEやDiscordでの連絡、電話でのフォロー等を含めてください。
+
+【その他】
+その他特記事項。特にない場合は「特になし」としてください。
+
+【妥当性】
+在宅就労継続の妥当性を1〜2文で。`;
+
+                try {
+                    const allModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash'];
+                    let generated = false;
+
+                    for (const modelName of allModels) {
+                        if (generated) break;
+                        try {
+                            const genAI = new window.GoogleGenerativeAI(currentKey);
+                            const model = genAI.getGenerativeModel({ model: modelName });
+                            const result = await model.generateContent(batchPrompt);
+                            const response = await result.response;
+                            const fullText = response.text();
+
+                            if (fullText && fullText.trim()) {
+                                const parseSection = (text, startTag, endTags) => {
+                                    const startIdx = text.indexOf(startTag);
+                                    if (startIdx === -1) return '';
+                                    const afterStart = text.substring(startIdx + startTag.length);
+                                    let endIdx = afterStart.length;
+                                    for (const tag of endTags) {
+                                        const idx = afterStart.indexOf(tag);
+                                        if (idx !== -1 && idx < endIdx) endIdx = idx;
+                                    }
+                                    return afterStart.substring(0, endIdx).trim();
+                                };
+
+                                setIndividualMonthlyData(prev => ({
+                                    ...prev,
+                                    trainingGoal: parseSection(fullText, '【訓練目標】', ['【取組内容】', '【達成度】', '【課題】', '【改善方針】', '【健康面】', '【その他】', '【妥当性】']) || prev.trainingGoal,
+                                    activities: parseSection(fullText, '【取組内容】', ['【達成度】', '【課題】', '【改善方針】', '【健康面】', '【その他】', '【妥当性】']) || prev.activities,
+                                    achievement: parseSection(fullText, '【達成度】', ['【課題】', '【改善方針】', '【健康面】', '【その他】', '【妥当性】']) || prev.achievement,
+                                    issues: parseSection(fullText, '【課題】', ['【改善方針】', '【健康面】', '【その他】', '【妥当性】']) || prev.issues,
+                                    improvementPlan: parseSection(fullText, '【改善方針】', ['【健康面】', '【その他】', '【妥当性】']) || prev.improvementPlan,
+                                    healthNotes: parseSection(fullText, '【健康面】', ['【その他】', '【妥当性】']) || prev.healthNotes,
+                                    otherNotes: parseSection(fullText, '【その他】', ['【妥当性】']) || prev.otherNotes,
+                                    workValidity: parseSection(fullText, '【妥当性】', []) || prev.workValidity
+                                }));
+                                generated = true;
+                                alert('✅ AI生成が完了しました。内容を確認・修正してから保存してください。');
+                            }
+                        } catch (e) {
+                            console.warn(`AI生成エラー (model: ${modelName}):`, e.message);
+                        }
+                    }
+                    if (!generated) {
+                        alert('AI生成に失敗しました。APIキーやネットワークを確認してください。');
+                    }
+                } catch (err) {
+                    console.error('個別達成度AI生成エラー:', err);
+                    alert('エラーが発生しました: ' + err.message);
+                } finally {
+                    setIndividualMonthlyLoading(false);
+                }
+            };
+
+            // --- 個別 達成度評価の保存 ---
+            const saveIndividualMonthlyEval = () => {
+                if (!individualMonthlyData.userId) { alert('利用者を選択してください'); return; }
+
+                const year = individualMonthlyData.targetYear;
+                const month = individualMonthlyData.targetMonth;
+                const user = users.find(u => u.id === individualMonthlyData.userId);
+
+                // 重複チェック
+                const existing = savedMonthlyEvals.find(e =>
+                    e.userId === individualMonthlyData.userId &&
+                    e.targetYear === year &&
+                    e.targetMonth === month
+                );
+                if (existing) {
+                    if (!confirm(`${user ? user.name : 'この利用者'}の${year}年${month}月の達成度評価は既に存在します。\n上書きしますか？`)) {
+                        return;
+                    }
+                }
+
+                // 前月の評価日を検索
+                const prevEval = savedMonthlyEvals
+                    .filter(e => e.userId === individualMonthlyData.userId && (e.targetYear < year || (e.targetYear === year && e.targetMonth < month)))
+                    .sort((a, b) => (b.targetYear * 12 + b.targetMonth) - (a.targetYear * 12 + a.targetMonth))[0];
+
+                const newEval = {
+                    ...individualMonthlyData,
+                    id: existing ? existing.id : generateId(),
+                    previousEvalDate: individualMonthlyData.previousEvalDate || (prevEval ? prevEval.implementationDate : ''),
+                    createdAt: existing ? existing.createdAt : new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                };
+
+                if (existing) {
+                    setSavedMonthlyEvals(prev => prev.map(e => e.id === existing.id ? newEval : e));
+                } else {
+                    setSavedMonthlyEvals(prev => [...prev, newEval]);
+                }
+
+                alert('✅ 達成度評価を保存しました。「月1達成度評価」ページで確認・Excel出力できます。');
+                setShowIndividualMonthlyModal(false);
+                setIndividualMonthlyData({
+                    userId: '', targetYear: now.getFullYear(), targetMonth: now.getMonth() + 1,
+                    implementationDate: now.toISOString().split('T')[0],
+                    timeStart: '10:00', timeEnd: '10:15', method: 'commute', methodOther: '',
+                    trainingGoal: '', activities: '', achievement: '',
+                    issues: '', improvementPlan: '', healthNotes: '',
+                    otherNotes: '', workValidity: '', evaluator: '近藤恵子', previousEvalDate: ''
+                });
+            };
+
             // --- 記録保存 ---
             const saveRecord = async () => {
                 if (!formData.userId) { alert('利用者を選択してください'); return; }
@@ -2735,6 +3090,24 @@ ${text}`;
                                     <p className="text-xs text-gray-400 mt-3">※ 同じ対象期間の記録が既に存在する利用者はスキップされます。</p>
                                 </div>
 
+                                {/* 個別作成ボタン */}
+                                <div className="flex gap-3 flex-wrap">
+                                    <button
+                                        onClick={() => setShowIndividualWeeklyModal(true)}
+                                        className="btn px-5 py-3 text-white font-bold shadow-lg transform hover:-translate-y-1 transition rounded-xl"
+                                        style={{background: 'linear-gradient(135deg, #10b981, #059669)'}}
+                                    >
+                                        ➕ 個別に週評価を作成
+                                    </button>
+                                    <button
+                                        onClick={() => setShowIndividualMonthlyModal(true)}
+                                        className="btn px-5 py-3 text-white font-bold shadow-lg transform hover:-translate-y-1 transition rounded-xl"
+                                        style={{background: 'linear-gradient(135deg, #f59e0b, #d97706)'}}
+                                    >
+                                        ➕ 個別に達成度評価を作成
+                                    </button>
+                                </div>
+
                                 {/* 1ヶ月分帳票出力 */}
                                 <MonthlyExportPanel
                                     sortedUsers={sortedUsers}
@@ -2785,6 +3158,285 @@ ${text}`;
                                     </table>
                                     {records.length === 0 && <p className="text-center text-gray-400 py-10">記録がありません</p>}
                                 </div>
+
+                                {/* --- 個別 週評価作成モーダル --- */}
+                                {showIndividualWeeklyModal && (
+                                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={(e) => { if (e.target === e.currentTarget) setShowIndividualWeeklyModal(false); }}>
+                                        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto" style={{animation: 'fadeIn 0.2s ease-out'}}>
+                                            <div className="sticky top-0 bg-white border-b px-6 py-4 rounded-t-2xl flex justify-between items-center z-10">
+                                                <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                                                    <span className="bg-green-500 w-2 h-6 rounded-full inline-block"></span>
+                                                    個別に週評価を作成
+                                                </h3>
+                                                <button onClick={() => setShowIndividualWeeklyModal(false)} className="text-gray-400 hover:text-gray-600 transition text-2xl leading-none">&times;</button>
+                                            </div>
+                                            <div className="p-6 space-y-5">
+                                                {/* 利用者選択 */}
+                                                <div>
+                                                    <label className="block text-sm font-bold text-gray-600 mb-1">利用者 <span className="text-red-500">*</span></label>
+                                                    <select
+                                                        value={individualWeeklyData.userId}
+                                                        onChange={e => {
+                                                            const uid = e.target.value;
+                                                            setIndividualWeeklyData(prev => ({ ...prev, userId: uid }));
+                                                            if (uid) {
+                                                                // 日付再計算
+                                                                const date = individualWeeklyData.implementationDate;
+                                                                let newData = { ...individualWeeklyData, userId: uid, implementationDate: date };
+                                                                const userRecs = records
+                                                                    .filter(r => r.userId === uid && new Date(r.implementationDate) < new Date(date))
+                                                                    .sort((a, b) => new Date(b.implementationDate) - new Date(a.implementationDate));
+                                                                if (userRecs.length > 0) {
+                                                                    newData.previousDate = userRecs[0].implementationDate;
+                                                                } else {
+                                                                    const prev = new Date(date);
+                                                                    prev.setDate(prev.getDate() - 7);
+                                                                    newData.previousDate = prev.toISOString().split('T')[0];
+                                                                }
+                                                                const implDateObj = new Date(date);
+                                                                const day = implDateObj.getDay();
+                                                                const diffToMon = (day === 0 ? -6 : 1) - day;
+                                                                const thisMon = new Date(implDateObj);
+                                                                thisMon.setDate(implDateObj.getDate() + diffToMon);
+                                                                const lastMon = new Date(thisMon);
+                                                                lastMon.setDate(thisMon.getDate() - 7);
+                                                                const lastSun = new Date(lastMon);
+                                                                lastSun.setDate(lastMon.getDate() + 6);
+                                                                newData.periodStart = lastMon.toISOString().split('T')[0];
+                                                                newData.periodEnd = lastSun.toISOString().split('T')[0];
+                                                                setIndividualWeeklyData(newData);
+                                                            }
+                                                        }}
+                                                        className="input-field font-bold"
+                                                    >
+                                                        <option value="">選択してください</option>
+                                                        {sortedUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                                                    </select>
+                                                </div>
+
+                                                {/* 日付 */}
+                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                                    <div>
+                                                        <label className="block text-sm font-bold text-gray-600 mb-1">実施日</label>
+                                                        <input type="date" className="input-field" value={individualWeeklyData.implementationDate}
+                                                            onChange={e => handleIndividualWeeklyDateChange(e.target.value)} />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-sm font-bold text-gray-600 mb-1">前回実施日</label>
+                                                        <input type="date" className="input-field" value={individualWeeklyData.previousDate}
+                                                            onChange={e => setIndividualWeeklyData(prev => ({ ...prev, previousDate: e.target.value }))} />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-sm font-bold text-gray-600 mb-1">対象期間</label>
+                                                        <div className="input-field bg-gray-100 text-gray-500 text-sm">
+                                                            {individualWeeklyData.periodStart && individualWeeklyData.periodEnd
+                                                                ? `${getFormattedDate(individualWeeklyData.periodStart)} ～ ${getFormattedDate(individualWeeklyData.periodEnd)}`
+                                                                : '利用者と日付を選択'}
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {/* 方法 */}
+                                                <div>
+                                                    <label className="block text-sm font-bold text-gray-600 mb-2">実施方法</label>
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {['commute', 'visit', 'phone', 'line', 'discord', 'googleForm'].map(key => (
+                                                            <label key={key} className={`cursor-pointer px-3 py-1.5 rounded-lg border text-sm transition ${individualWeeklyData.selectedMethod === key ? 'bg-green-100 border-green-500 text-green-800 font-bold' : 'bg-white border-gray-200 text-gray-500'}`}>
+                                                                <input type="radio" name="indWeeklyMethod" className="hidden" checked={individualWeeklyData.selectedMethod === key}
+                                                                    onChange={() => setIndividualWeeklyData(prev => ({ ...prev, selectedMethod: key }))} />
+                                                                {key === 'commute' ? '通所' : key === 'visit' ? '訪問' : key === 'phone' ? '電話' : key === 'line' ? 'LINE' : key === 'discord' ? 'Discord' : 'Googleフォーム'}
+                                                            </label>
+                                                        ))}
+                                                    </div>
+                                                </div>
+
+                                                {/* テキストフィールド */}
+                                                {[
+                                                    { key: 'condition', label: '体調について', rows: 3 },
+                                                    { key: 'workContent', label: '在宅での作業内容について', rows: 3 },
+                                                    { key: 'goals', label: '今後の目標', rows: 3 }
+                                                ].map(field => (
+                                                    <div key={field.key}>
+                                                        <div className="flex justify-between items-center mb-1">
+                                                            <label className="block text-sm font-bold text-gray-600">{field.label}</label>
+                                                            <button
+                                                                onClick={() => generateIndividualWeeklyContent(field.key)}
+                                                                disabled={individualWeeklyLoading[field.key]}
+                                                                className="btn-ai"
+                                                            >
+                                                                {individualWeeklyLoading[field.key]
+                                                                    ? <span className="loading-dots">生成中</span>
+                                                                    : <><Icons.Sparkles /> AI生成</>}
+                                                            </button>
+                                                        </div>
+                                                        <textarea
+                                                            className="input-field resize-y"
+                                                            rows={field.rows}
+                                                            value={individualWeeklyData[field.key]}
+                                                            onChange={e => setIndividualWeeklyData(prev => ({ ...prev, [field.key]: e.target.value }))}
+                                                            placeholder={`キーワードを入力 → AIボタンで文章生成`}
+                                                        />
+                                                    </div>
+                                                ))}
+
+                                                {/* 記録者・管理者 */}
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    <div>
+                                                        <label className="block text-sm font-bold text-gray-600 mb-1">記録者 <span className="text-red-500">*</span></label>
+                                                        <input type="text" className="input-field" value={individualWeeklyData.recorder}
+                                                            onChange={e => setIndividualWeeklyData(prev => ({ ...prev, recorder: e.target.value }))}
+                                                            placeholder="記録者名" />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-sm font-bold text-gray-600 mb-1">確認者（管理責任者）</label>
+                                                        <input type="text" className="input-field" value={individualWeeklyData.manager}
+                                                            onChange={e => setIndividualWeeklyData(prev => ({ ...prev, manager: e.target.value }))} />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            {/* フッター */}
+                                            <div className="sticky bottom-0 bg-white border-t px-6 py-4 rounded-b-2xl flex justify-end gap-3">
+                                                <button onClick={() => setShowIndividualWeeklyModal(false)} className="btn btn-ghost px-6 py-2.5">キャンセル</button>
+                                                <button onClick={saveIndividualWeeklyRecord} className="btn px-8 py-2.5 text-white font-bold shadow-lg" style={{background: 'linear-gradient(135deg, #10b981, #059669)'}}>✅ 保存する</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* --- 個別 達成度評価作成モーダル --- */}
+                                {showIndividualMonthlyModal && (
+                                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={(e) => { if (e.target === e.currentTarget) setShowIndividualMonthlyModal(false); }}>
+                                        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto" style={{animation: 'fadeIn 0.2s ease-out'}}>
+                                            <div className="sticky top-0 bg-white border-b px-6 py-4 rounded-t-2xl flex justify-between items-center z-10">
+                                                <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                                                    <span className="bg-amber-500 w-2 h-6 rounded-full inline-block"></span>
+                                                    個別に達成度評価を作成
+                                                </h3>
+                                                <button onClick={() => setShowIndividualMonthlyModal(false)} className="text-gray-400 hover:text-gray-600 transition text-2xl leading-none">&times;</button>
+                                            </div>
+                                            <div className="p-6 space-y-5">
+                                                {/* 利用者選択 & 対象年月 */}
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    <div>
+                                                        <label className="block text-sm font-bold text-gray-600 mb-1">利用者 <span className="text-red-500">*</span></label>
+                                                        <select
+                                                            value={individualMonthlyData.userId}
+                                                            onChange={e => setIndividualMonthlyData(prev => ({ ...prev, userId: e.target.value }))}
+                                                            className="input-field font-bold"
+                                                        >
+                                                            <option value="">選択してください</option>
+                                                            {sortedUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                                                        </select>
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-sm font-bold text-gray-600 mb-1">対象年月</label>
+                                                        <div className="flex gap-2">
+                                                            <select className="input-field" value={individualMonthlyData.targetYear} onChange={e => setIndividualMonthlyData(prev => ({ ...prev, targetYear: Number(e.target.value) }))}>
+                                                                {[2024, 2025, 2026, 2027, 2028].map(y => <option key={y} value={y}>{`令和${y - 2018}年 (${y})`}</option>)}
+                                                            </select>
+                                                            <select className="input-field" value={individualMonthlyData.targetMonth} onChange={e => setIndividualMonthlyData(prev => ({ ...prev, targetMonth: Number(e.target.value) }))}>
+                                                                {[...Array(12)].map((_, i) => <option key={i + 1} value={i + 1}>{i + 1}月</option>)}
+                                                            </select>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {/* 実施日・時間 */}
+                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                                    <div>
+                                                        <label className="block text-sm font-bold text-gray-600 mb-1">実施日</label>
+                                                        <input type="date" className="input-field" value={individualMonthlyData.implementationDate}
+                                                            onChange={e => setIndividualMonthlyData(prev => ({ ...prev, implementationDate: e.target.value }))} />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-sm font-bold text-gray-600 mb-1">開始時間</label>
+                                                        <input type="time" className="input-field" value={individualMonthlyData.timeStart}
+                                                            onChange={e => setIndividualMonthlyData(prev => ({ ...prev, timeStart: e.target.value }))} />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-sm font-bold text-gray-600 mb-1">終了時間</label>
+                                                        <input type="time" className="input-field" value={individualMonthlyData.timeEnd}
+                                                            onChange={e => setIndividualMonthlyData(prev => ({ ...prev, timeEnd: e.target.value }))} />
+                                                    </div>
+                                                </div>
+
+                                                {/* 実施方法 */}
+                                                <div>
+                                                    <label className="block text-sm font-bold text-gray-600 mb-2">実施方法</label>
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {[{key:'line',label:'LINE'},{key:'discord',label:'Discord'},{key:'googleForm',label:'Googleフォーム'},{key:'phone',label:'電話'},{key:'visit',label:'訪問'},{key:'commute',label:'通所'},{key:'other',label:'その他'}].map(m => (
+                                                            <label key={m.key} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg cursor-pointer border transition text-sm ${individualMonthlyData.method === m.key ? 'bg-amber-50 border-amber-400 text-amber-700 font-bold' : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'}`}>
+                                                                <input type="radio" name="indMonthlyMethod" value={m.key} checked={individualMonthlyData.method === m.key}
+                                                                    onChange={e => setIndividualMonthlyData(prev => ({ ...prev, method: e.target.value }))} className="hidden" />
+                                                                {individualMonthlyData.method === m.key ? '☑' : '□'} {m.label}
+                                                            </label>
+                                                        ))}
+                                                    </div>
+                                                </div>
+
+                                                {/* AI一括生成ボタン */}
+                                                <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-4 border border-indigo-200">
+                                                    <div className="flex items-center justify-between">
+                                                        <div>
+                                                            <p className="font-bold text-indigo-700 text-sm">🤖 週評価データからAI自動生成</p>
+                                                            <p className="text-xs text-gray-500 mt-1">選択した利用者の対象月の週評価データを元に、全項目を自動生成します</p>
+                                                        </div>
+                                                        <button
+                                                            onClick={generateIndividualMonthlyAI}
+                                                            disabled={individualMonthlyLoading || !individualMonthlyData.userId}
+                                                            className={`btn px-5 py-2.5 text-white font-bold shadow-lg rounded-xl transition ${individualMonthlyLoading ? 'bg-gray-400 cursor-not-allowed' : ''}`}
+                                                            style={!individualMonthlyLoading ? {background: 'linear-gradient(135deg, #6366f1, #8b5cf6)'} : {}}
+                                                        >
+                                                            {individualMonthlyLoading ? <span className="loading-dots">AI生成中</span> : <><Icons.Sparkles /> AI一括生成</>}
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                {/* テキストフィールド */}
+                                                {[
+                                                    { key: 'trainingGoal', label: '訓練目標', rows: 4 },
+                                                    { key: 'activities', label: '取組内容', rows: 4 },
+                                                    { key: 'achievement', label: '訓練目標に対する達成度', rows: 4 },
+                                                    { key: 'issues', label: '課題', rows: 3 },
+                                                    { key: 'improvementPlan', label: '今後における課題の改善方針', rows: 3 },
+                                                    { key: 'healthNotes', label: '健康・体調面での留意事項', rows: 3 },
+                                                    { key: 'otherNotes', label: 'その他特記事項', rows: 2 },
+                                                    { key: 'workValidity', label: '在宅就労継続の妥当性', rows: 2 }
+                                                ].map(field => (
+                                                    <div key={field.key}>
+                                                        <label className="block text-sm font-bold text-gray-600 mb-1">{field.label}</label>
+                                                        <textarea
+                                                            className="input-field resize-y"
+                                                            rows={field.rows}
+                                                            value={individualMonthlyData[field.key] || ''}
+                                                            onChange={e => setIndividualMonthlyData(prev => ({ ...prev, [field.key]: e.target.value }))}
+                                                        />
+                                                    </div>
+                                                ))}
+
+                                                {/* 評価者・前回評価日 */}
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    <div>
+                                                        <label className="block text-sm font-bold text-gray-600 mb-1">評価実施者</label>
+                                                        <input type="text" className="input-field" value={individualMonthlyData.evaluator}
+                                                            onChange={e => setIndividualMonthlyData(prev => ({ ...prev, evaluator: e.target.value }))} />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-sm font-bold text-gray-600 mb-1">前回の達成度評価日</label>
+                                                        <input type="date" className="input-field" value={individualMonthlyData.previousEvalDate}
+                                                            onChange={e => setIndividualMonthlyData(prev => ({ ...prev, previousEvalDate: e.target.value }))} />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            {/* フッター */}
+                                            <div className="sticky bottom-0 bg-white border-t px-6 py-4 rounded-b-2xl flex justify-end gap-3">
+                                                <button onClick={() => setShowIndividualMonthlyModal(false)} className="btn btn-ghost px-6 py-2.5">キャンセル</button>
+                                                <button onClick={saveIndividualMonthlyEval} className="btn px-8 py-2.5 text-white font-bold shadow-lg" style={{background: 'linear-gradient(135deg, #f59e0b, #d97706)'}}>✅ 保存する</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
                             </div>
                         )}
 

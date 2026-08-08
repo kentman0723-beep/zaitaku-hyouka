@@ -1186,6 +1186,119 @@ ${pages}
                 printWindow.document.close();
             };
 
+            // --- 週評価の個別印刷 ---
+            const printWeeklyRecord = (rec) => {
+                const printWindow = window.open('', '_blank');
+                if (!printWindow) { alert('ポップアップがブロックされました。許可してください。'); return; }
+
+                const user = users.find(u => u.id === rec.userId);
+                const userName = user ? user.name : '不明';
+                const isMethod = (key) => rec.selectedMethod === key ? '✔' : '';
+
+                const htmlContent = `<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>${userName}_週評価_${rec.implementationDate}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'MS PGothic', 'ＭＳ Ｐゴシック', sans-serif; font-size: 10pt; color: #000; }
+        .page { padding: 10mm; max-width: 210mm; margin: 0 auto; }
+        table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+        td { border: 1px solid #000; padding: 6px 8px; vertical-align: middle; }
+        .title { font-size: 14pt; font-weight: bold; text-align: center; }
+        .note { font-size: 8pt; text-align: left; vertical-align: bottom; }
+        .label { font-weight: bold; font-size: 9pt; text-align: center; background-color: #f2f2f2; width: 18%; }
+        .value { text-align: center; font-size: 10pt; }
+        .center { text-align: center; }
+        .header-fill { background-color: #c5d9f1; font-weight: bold; text-align: center; font-size: 11pt; padding: 8px; }
+        .content { text-align: left; vertical-align: top; padding: 8px 10px; min-height: 80px; line-height: 1.6; font-size: 9.5pt; word-break: break-all; }
+        .footer-note { font-size: 8pt; text-align: right; margin-top: 6px; }
+        @media print {
+            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .page { padding: 5mm; }
+            @page { size: A4 portrait; margin: 10mm; }
+        }
+        @media screen {
+            body { background: #eee; }
+            .page { background: #fff; margin: 10mm auto; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
+        }
+    </style>
+</head>
+<body>
+    <div class="page">
+        <table>
+            <tr style="height: 40px;">
+                <td colspan="3" class="title">評価 ※1</td>
+                <td colspan="6" class="note">※1 評価は作業・訓練対象日(期間最終日)の1週間以内に実施すること</td>
+            </tr>
+            <tr>
+                <td class="label">氏名</td>
+                <td colspan="8" class="value" style="font-weight: bold; font-size: 11pt; text-align: left; padding-left: 12px;">${userName}</td>
+            </tr>
+            <tr>
+                <td class="label">実施日</td>
+                <td colspan="3" class="value">${getFormattedDate(rec.implementationDate)}</td>
+                <td class="label">前回実施日</td>
+                <td colspan="4" class="value">${getFormattedDate(rec.previousDate)}</td>
+            </tr>
+            <tr>
+                <td rowspan="2" class="label">方法</td>
+                <td class="center" style="width: 10%;">LINE</td>
+                <td class="center" style="width: 6%; font-size: 12pt;">${isMethod('line')}</td>
+                <td class="center" style="width: 12%;">Discord</td>
+                <td class="center" style="width: 6%; font-size: 12pt;">${isMethod('discord')}</td>
+                <td class="center" style="width: 16%;">Googleフォーム</td>
+                <td class="center" style="width: 6%; font-size: 12pt;">${isMethod('googleForm')}</td>
+                <td colspan="2"></td>
+            </tr>
+            <tr>
+                <td class="center">訪問</td>
+                <td class="center" style="font-size: 12pt;">${isMethod('visit')}</td>
+                <td class="center">通所</td>
+                <td class="center" style="font-size: 12pt;">${isMethod('commute')}</td>
+                <td class="center">電話</td>
+                <td class="center" style="font-size: 12pt;">${isMethod('phone')}</td>
+                <td colspan="2"></td>
+            </tr>
+            <tr>
+                <td class="label">対象期間</td>
+                <td colspan="3" class="value">${getFormattedDate(rec.periodStart)}</td>
+                <td class="center" style="width: 5%;">～</td>
+                <td colspan="4" class="value">${getFormattedDate(rec.periodEnd)}</td>
+            </tr>
+            <tr>
+                <td colspan="9" class="header-fill">モニタリング内容</td>
+            </tr>
+            <tr style="height: 100px;">
+                <td class="label">体調について</td>
+                <td colspan="8" class="content">${(rec.condition || '').replace(/\n/g, '<br>')}</td>
+            </tr>
+            <tr style="height: 120px;">
+                <td class="label">在宅での作業内容について</td>
+                <td colspan="8" class="content">${(rec.workContent || '').replace(/\n/g, '<br>')}</td>
+            </tr>
+            <tr style="height: 100px;">
+                <td class="label">今後の目標</td>
+                <td colspan="8" class="content">${(rec.goals || '').replace(/\n/g, '<br>')}</td>
+            </tr>
+            <tr>
+                <td class="label">記録者</td>
+                <td colspan="3" class="value">${rec.recorder || ''}</td>
+                <td class="label" style="font-size: 8pt;">確認者(サービス<br>管理責任者)</td>
+                <td colspan="4" class="value">${rec.manager || ''}</td>
+            </tr>
+        </table>
+        <div class="footer-note">評価内容はサービス管理責任者が必ず確認すること</div>
+    </div>
+    <script>window.onload = function() { window.print(); };<\/script>
+</body>
+</html>`;
+
+                printWindow.document.write(htmlContent);
+                printWindow.document.close();
+            };
+
 
             // --- データ読み込み（Supabase優先、localStorageフォールバック） ---
             const loadData = async () => {
@@ -1718,7 +1831,7 @@ ${instruction}
             };
 
             // --- 個別 週評価の保存 ---
-            const saveIndividualWeeklyRecord = () => {
+            const saveIndividualWeeklyRecord = (andPrint = false) => {
                 if (!individualWeeklyData.userId) { alert('利用者を選択してください'); return; }
                 if (!individualWeeklyData.recorder) { alert('記録者を入力してください'); return; }
 
@@ -1738,6 +1851,11 @@ ${instruction}
                 setRecords([newRecord, ...records]);
                 alert('✅ 週評価を保存しました');
                 setShowIndividualWeeklyModal(false);
+
+                if (andPrint) {
+                    printWeeklyRecord(newRecord);
+                }
+
                 setIndividualWeeklyData({
                     userId: '', implementationDate: new Date().toISOString().split('T')[0],
                     previousDate: '', periodStart: '', periodEnd: '',
@@ -1893,7 +2011,7 @@ ${baseContext}
             };
 
             // --- 個別 達成度評価の保存 ---
-            const saveIndividualMonthlyEval = () => {
+            const saveIndividualMonthlyEval = (andPrint = false) => {
                 if (!individualMonthlyData.userId) { alert('利用者を選択してください'); return; }
 
                 const year = individualMonthlyData.targetYear;
@@ -1931,8 +2049,13 @@ ${baseContext}
                     setSavedMonthlyEvals(prev => [...prev, newEval]);
                 }
 
-                alert('✅ 達成度評価を保存しました。「月1達成度評価」ページで確認・Excel出力できます。');
+                alert('✅ 達成度評価を保存しました。');
                 setShowIndividualMonthlyModal(false);
+
+                if (andPrint) {
+                    printAllMonthlyEvals([newEval]);
+                }
+
                 setIndividualMonthlyData({
                     userId: '', targetYear: now.getFullYear(), targetMonth: now.getMonth() + 1,
                     implementationDate: now.toISOString().split('T')[0],
@@ -3139,10 +3262,16 @@ ${baseContext}
                                                         <td className="p-3 text-sm">{rec.recorder}</td>
                                                         <td className="p-3 text-right flex justify-end gap-2">
                                                             <button
+                                                                onClick={() => printWeeklyRecord(rec)}
+                                                                className="text-indigo-600 hover:underline text-sm font-bold"
+                                                            >
+                                                                🖨️ 印刷
+                                                            </button>
+                                                            <button
                                                                 onClick={() => exportFormattedExcel(rec)}
                                                                 className="text-green-600 hover:underline text-sm font-bold"
                                                             >
-                                                                📋 帳票出力
+                                                                📋 Excel
                                                             </button>
                                                             <button
                                                                 onClick={() => { if (confirm('削除しますか？')) { deleteRecordFromSupabase(rec.id); setRecords(records.filter(r => r.id !== rec.id)); } }}

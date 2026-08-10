@@ -4382,6 +4382,36 @@ ${baseContext}
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
     </script>
+    <script>
+        // Babel Standalone 遅延読み込み対策（DOMContentLoaded後でも確実に変換をトリガー）
+        (function() {
+            function executeBabel() {
+                if (window.Babel && typeof window.Babel.transformScriptTags === 'function') {
+                    try {
+                        window.Babel.transformScriptTags();
+                    } catch (e) {
+                        console.error('Babel execution error:', e);
+                    }
+                }
+            }
+            if (document.readyState === 'complete' || document.readyState === 'interactive') {
+                setTimeout(executeBabel, 50);
+                setTimeout(executeBabel, 500);
+            } else {
+                window.addEventListener('DOMContentLoaded', executeBabel);
+                window.addEventListener('load', executeBabel);
+            }
+
+            // 万が一のフリーズ対策（5秒以上ローディングが終わらない場合の安全フォールバック）
+            setTimeout(function() {
+                var rootEl = document.getElementById('root');
+                if (rootEl && rootEl.innerText && rootEl.innerText.indexOf('アプリを準備しています') !== -1) {
+                    console.warn('ローディングタイムアウト: Babelの手動実行を試みます');
+                    executeBabel();
+                }
+            }, 2500);
+        })();
+    </script>
 </body>
 
 </html>

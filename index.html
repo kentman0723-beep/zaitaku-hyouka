@@ -217,22 +217,24 @@
 
     <script>
 // Pre-compiled Vanilla JavaScript (React.createElement - Classic Runtime)
+// Pre-compiled Vanilla JavaScript (React.createElement - Classic Runtime)
+// Pre-compiled Vanilla JavaScript (React.createElement - Classic Runtime)
 // APIキーはSupabaseから取得します
 const MANUAL_API_KEY = ''; // 設定画面から入力してください（公開リポジトリにキーを書くとGoogleに無効化されます）
 
 // --- Supabase 設定 ---
 const SUPABASE_URL = 'https://rowvbhhwbgllfczvqkzx.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJvd3ZiaGh3YmdsbGZjenZxa3p4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA2NjgxNzksImV4cCI6MjA4NjI0NDE3OX0.kfIYof-B44s0M3nDHJ97oJVTucgV4EyJi8pyIvfvTMw';
-let supabase = null;
+let sbClient = null;
 try {
   if (window.supabase && typeof window.supabase.createClient === 'function') {
-    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   }
 } catch (e) {
   console.warn('Supabase Client init warning:', e);
 }
-if (!supabase) {
-  supabase = {
+if (!sbClient) {
+  sbClient = {
     from: () => ({
       select: () => Promise.resolve({
         data: [],
@@ -572,7 +574,7 @@ const LoginPage = ({
       const {
         data,
         error: authError
-      } = await supabase.auth.signInWithPassword({
+      } = await supabaseClient.auth.signInWithPassword({
         email,
         password
       });
@@ -1860,12 +1862,12 @@ ${pages}
     printWindow.document.write(htmlContent);
     printWindow.document.close();
   };
-  co; // --- データ読み込み（アカウントごとの厳格な分離） ---
+  // --- データ読み込み（アカウントごとの厳格な分離） ---
   const loadData = async () => {
     try {
       // Supabaseから読み込み（account_id でフィルタ）
-      let usersQuery = supabase.from('users').select('*').eq('account_id', accountId);
-      let recordsQuery = supabase.from('records').select('*').eq('account_id', accountId);
+      let usersQuery = supabaseClient.from('users').select('*').eq('account_id', accountId);
+      let recordsQuery = supabaseClient.from('records').select('*').eq('account_id', accountId);
       const {
         data: usersData,
         error: usersError
@@ -1900,10 +1902,10 @@ ${pages}
         // Supabaseにaccount_id未設定のデータがある場合
         const {
           data: legacyUsers
-        } = await supabase.from('users').select('*').is('account_id', null);
+        } = await supabaseClient.from('users').select('*').is('account_id', null);
         const {
           data: legacyRecords
-        } = await supabase.from('records').select('*').is('account_id', null);
+        } = await supabaseClient.from('records').select('*').is('account_id', null);
         if (legacyUsers && legacyUsers.length > 0) {
           const mappedLegacy = legacyUsers.map(u => ({
             id: u.id,
@@ -1974,7 +1976,7 @@ ${pages}
   // Supabase 書き込みヘルパー
   const saveUserToSupabase = async user => {
     try {
-      await supabase.from('users').upsert({
+      await supabaseClient.from('users').upsert({
         id: user.id,
         name: user.name,
         furigana: user.furigana || '',
@@ -1988,7 +1990,7 @@ ${pages}
   };
   const deleteUserFromSupabase = async userId => {
     try {
-      await supabase.from('users').delete().eq('id', userId);
+      await supabaseClient.from('users').delete().eq('id', userId);
       console.log('🗑️ Supabaseからユーザー削除:', userId);
     } catch (e) {
       console.warn('Supabase削除失敗(user):', e);
@@ -1996,7 +1998,7 @@ ${pages}
   };
   const saveRecordToSupabase = async record => {
     try {
-      await supabase.from('records').upsert({
+      await supabaseClient.from('records').upsert({
         id: record.id,
         user_id: record.userId,
         implementation_date: record.implementationDate,
@@ -2018,7 +2020,7 @@ ${pages}
   };
   const deleteRecordFromSupabase = async recordId => {
     try {
-      await supabase.from('records').delete().eq('id', recordId);
+      await supabaseClient.from('records').delete().eq('id', recordId);
       console.log('🗑️ Supabaseから記録削除:', recordId);
     } catch (e) {
       console.warn('Supabase削除失敗(record):', e);

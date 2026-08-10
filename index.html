@@ -10,9 +10,15 @@
 
     <!-- スタイル・ライブラリ読み込み -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
+    <!-- React & ReactDOM & Babel (jsDelivr + fallback) -->
+    <script crossorigin src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7/babel.min.js"></script>
+    <script>
+        if (!window.React) document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"><' + '/script>');
+        if (!window.ReactDOM) document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"><' + '/script>');
+        if (!window.Babel) document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"><' + '/script>');
+    </script>
     <!-- Excel出力用ライブラリ (xlsx-js-style: スタイル対応版) -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
     <!-- ZIP出力用ライブラリ -->
@@ -197,7 +203,17 @@
 </head>
 
 <body>
-    <div id="root"></div>
+    <div id="root">
+        <div style="min-height: 100vh; display: flex; align-items: center; justify-content: center; background: linear-gradient(to bottom right, #fdf2f8, #f3e8ff, #e0e7ff); font-family: sans-serif;">
+            <div style="text-align: center; padding: 2rem; background: rgba(255,255,255,0.85); border-radius: 1rem; box-shadow: 0 10px 25px rgba(0,0,0,0.1); max-width: 400px; width: 90%;">
+                <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🏠</div>
+                <h2 style="font-size: 1.25rem; font-weight: bold; color: #374151; margin-bottom: 0.5rem;">在宅書類自動作成</h2>
+                <p style="color: #6b7280; font-size: 0.875rem; margin-bottom: 1.25rem;">アプリを準備しています...</p>
+                <div style="display: inline-block; width: 2rem; height: 2rem; border: 3px solid #e5e7eb; border-top: 3px solid #a78bfa; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
+            </div>
+        </div>
+    </div>
 
     <script type="text/babel">
         // APIキーはSupabaseから取得します
@@ -206,7 +222,36 @@
         // --- Supabase 設定 ---
         const SUPABASE_URL = 'https://rowvbhhwbgllfczvqkzx.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJvd3ZiaGh3YmdsbGZjenZxa3p4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA2NjgxNzksImV4cCI6MjA4NjI0NDE3OX0.kfIYof-B44s0M3nDHJ97oJVTucgV4EyJi8pyIvfvTMw';
-        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        
+        let supabase = null;
+        try {
+            if (window.supabase && typeof window.supabase.createClient === 'function') {
+                supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            }
+        } catch (e) {
+            console.warn('Supabase Client init warning:', e);
+        }
+        if (!supabase) {
+            supabase = {
+                from: () => ({
+                    select: () => Promise.resolve({ data: [], error: null }),
+                    insert: () => Promise.resolve({ data: [], error: null }),
+                    update: () => Promise.resolve({ data: [], error: null }),
+                    upsert: () => Promise.resolve({ data: [], error: null }),
+                    delete: () => Promise.resolve({ data: [], error: null }),
+                    or: () => ({ select: () => Promise.resolve({ data: [], error: null }) }),
+                    eq: () => ({ single: () => Promise.resolve({ data: null, error: null }), select: () => Promise.resolve({ data: [], error: null }) }),
+                    is: () => Promise.resolve({ data: [], error: null })
+                }),
+                auth: {
+                    getSession: () => Promise.resolve({ data: { session: null } }),
+                    onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
+                    signInWithPassword: () => Promise.resolve({ data: {}, error: new Error('Supabase not available') }),
+                    signUp: () => Promise.resolve({ data: {}, error: new Error('Supabase not available') }),
+                    signOut: () => Promise.resolve({})
+                }
+            };
+        }
 
         const { useState, useEffect, useMemo } = React;
 

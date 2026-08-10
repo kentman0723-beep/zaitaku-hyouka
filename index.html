@@ -233,24 +233,73 @@
             return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
         };
 
-        // --- 入室パスワード ---
-        const ENTRY_PASSWORD = '202603191513';
-
-        // --- パスワード入力ページ コンポーネント ---
+        // --- ログイン/アカウント登録ページ コンポーネント ---
         const LoginPage = ({ onLogin }) => {
+            const [mode, setMode] = useState('login'); // 'login' or 'register'
+            const [email, setEmail] = useState('');
             const [password, setPassword] = useState('');
+            const [displayName, setDisplayName] = useState('');
             const [error, setError] = useState('');
+            const [loading, setLoading] = useState(false);
             const [shake, setShake] = useState(false);
 
-            const handleSubmit = (e) => {
+            const handleLogin = async (e) => {
                 e.preventDefault();
-                if (password === ENTRY_PASSWORD) {
-                    sessionStorage.setItem('sw_authenticated', 'true');
-                    onLogin();
-                } else {
-                    setError('パスワードが正しくありません');
+                setError('');
+                setLoading(true);
+                try {
+                    const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
+                    if (authError) throw authError;
+                    // onLogin は onAuthStateChange で自動的に呼ばれる
+                } catch (err) {
+                    console.error('ログインエラー:', err);
+                    let msg = 'ログインに失敗しました';
+                    if (err.message?.includes('Invalid login')) msg = 'メールアドレスまたはパスワードが正しくありません';
+                    else if (err.message?.includes('Email not confirmed')) msg = 'メールアドレスが確認されていません';
+                    setError(msg);
                     setShake(true);
                     setTimeout(() => setShake(false), 500);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            const handleRegister = async (e) => {
+                e.preventDefault();
+                setError('');
+                if (!displayName.trim()) { setError('アカウント名を入力してください'); return; }
+                if (password.length < 6) { setError('パスワードは6文字以上で入力してください'); return; }
+                setLoading(true);
+                try {
+                    const { data, error: authError } = await supabase.auth.signUp({ email, password });
+                    if (authError) throw authError;
+                    // accounts テーブルにアカウント情報を登録
+                    if (data.user) {
+                        const { error: insertError } = await supabase.from('accounts').insert({
+                            auth_uid: data.user.id,
+                            email: email,
+                            display_name: displayName.trim()
+                        });
+                        if (insertError) {
+                            console.error('accounts INSERT エラー:', insertError);
+                            // テーブルが未作成の場合のフォールバック
+                            localStorage.setItem('sw_account_name_' + data.user.id, displayName.trim());
+                        }
+                    }
+                    alert('✅ アカウントを登録しました。ログインしてください。');
+                    setMode('login');
+                    setPassword('');
+                } catch (err) {
+                    console.error('登録エラー:', err);
+                    let msg = 'アカウント登録に失敗しました';
+                    if (err.message?.includes('already registered')) msg = 'このメールアドレスは既に登録されています';
+                    else if (err.message?.includes('valid email')) msg = '有効なメールアドレスを入力してください';
+                    else if (err.message?.includes('at least')) msg = 'パスワードは6文字以上で入力してください';
+                    setError(msg);
+                    setShake(true);
+                    setTimeout(() => setShake(false), 500);
+                } finally {
+                    setLoading(false);
                 }
             };
 
@@ -275,20 +324,61 @@
                         </div>
 
                         <div className={`glass p-8 rounded-2xl ${shake ? 'animate-bounce' : ''}`} style={shake ? {animation: 'shake 0.5s'} : {}}>
+                            {/* タブ切り替え */}
+                            <div className="flex mb-6 bg-gray-100 rounded-xl p-1">
+                                <button
+                                    onClick={() => { setMode('login'); setError(''); }}
+                                    className={`flex-1 py-2 text-sm font-bold rounded-lg transition ${mode === 'login' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                                >ログイン</button>
+                                <button
+                                    onClick={() => { setMode('register'); setError(''); }}
+                                    className={`flex-1 py-2 text-sm font-bold rounded-lg transition ${mode === 'register' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                                >新規登録</button>
+                            </div>
+
                             {error && <div className="bg-red-50 text-red-500 p-3 rounded-lg text-sm mb-4 text-center font-medium">{error}</div>}
 
-                            <form onSubmit={handleSubmit}>
-                                <div className="mb-2 text-center">
-                                    <span className="text-4xl">🔒</span>
-                                </div>
-                                <h2 className="text-lg font-bold text-gray-700 mb-4 text-center">入室パスワード</h2>
-                                <div className="mb-6">
-                                    <input type="password" className="input-field text-center text-lg tracking-widest" value={password} onChange={e => setPassword(e.target.value)} placeholder="パスワードを入力" required autoFocus />
-                                </div>
-                                <button type="submit" className="w-full h-12 text-base font-bold rounded-xl text-white transition" style={{background: 'linear-gradient(135deg, #f472b6 0%, #a78bfa 100%)'}}>
-                                    入室する
-                                </button>
-                            </form>
+                            {mode === 'login' ? (
+                                <form onSubmit={handleLogin}>
+                                    <div className="mb-2 text-center">
+                                        <span className="text-4xl">🔑</span>
+                                    </div>
+                                    <h2 className="text-lg font-bold text-gray-700 mb-4 text-center">アカウントにログイン</h2>
+                                    <div className="mb-4">
+                                        <label className="block text-sm font-bold text-gray-600 mb-1">メールアドレス</label>
+                                        <input type="email" className="input-field" value={email} onChange={e => setEmail(e.target.value)} placeholder="example@mail.com" required autoFocus />
+                                    </div>
+                                    <div className="mb-6">
+                                        <label className="block text-sm font-bold text-gray-600 mb-1">パスワード</label>
+                                        <input type="password" className="input-field" value={password} onChange={e => setPassword(e.target.value)} placeholder="パスワードを入力" required />
+                                    </div>
+                                    <button type="submit" disabled={loading} className="w-full h-12 text-base font-bold rounded-xl text-white transition disabled:opacity-50" style={{background: 'linear-gradient(135deg, #f472b6 0%, #a78bfa 100%)'}}>
+                                        {loading ? '⏳ ログイン中...' : 'ログイン'}
+                                    </button>
+                                </form>
+                            ) : (
+                                <form onSubmit={handleRegister}>
+                                    <div className="mb-2 text-center">
+                                        <span className="text-4xl">✨</span>
+                                    </div>
+                                    <h2 className="text-lg font-bold text-gray-700 mb-4 text-center">新規アカウント登録</h2>
+                                    <div className="mb-4">
+                                        <label className="block text-sm font-bold text-gray-600 mb-1">アカウント名（事業所名）</label>
+                                        <input type="text" className="input-field" value={displayName} onChange={e => setDisplayName(e.target.value)} placeholder="例：小倉鍛冶町" required />
+                                    </div>
+                                    <div className="mb-4">
+                                        <label className="block text-sm font-bold text-gray-600 mb-1">メールアドレス</label>
+                                        <input type="email" className="input-field" value={email} onChange={e => setEmail(e.target.value)} placeholder="example@mail.com" required />
+                                    </div>
+                                    <div className="mb-6">
+                                        <label className="block text-sm font-bold text-gray-600 mb-1">パスワード</label>
+                                        <input type="password" className="input-field" value={password} onChange={e => setPassword(e.target.value)} placeholder="6文字以上" required />
+                                    </div>
+                                    <button type="submit" disabled={loading} className="w-full h-12 text-base font-bold rounded-xl text-white transition disabled:opacity-50" style={{background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)'}}>
+                                        {loading ? '⏳ 登録中...' : 'アカウントを作成'}
+                                    </button>
+                                </form>
+                            )}
                         </div>
                         <p className="text-center text-xs text-gray-400 mt-6">© 2026 在宅書類自動作成</p>
                     </div>
@@ -298,38 +388,99 @@
 
         // --- メインコンポーネント ---
         const App = () => {
-            // パスワード認証状態
-            const [authenticated, setAuthenticated] = useState(() => {
-                return sessionStorage.getItem('sw_authenticated') === 'true';
-            });
+            const [authUser, setAuthUser] = useState(null);
+            const [authLoading, setAuthLoading] = useState(true);
+            const [accountInfo, setAccountInfo] = useState(null); // { id, display_name, auth_uid }
 
-            const handleLogout = () => {
-                sessionStorage.removeItem('sw_authenticated');
-                setAuthenticated(false);
+            // Supabase Auth セッション管理
+            useEffect(() => {
+                // 既存セッションの確認
+                supabase.auth.getSession().then(({ data: { session } }) => {
+                    setAuthUser(session?.user ?? null);
+                    if (session?.user) loadAccountInfo(session.user);
+                    setAuthLoading(false);
+                });
+                // Auth 状態変化の監視
+                const { data: { subscription } } = supabase.auth.onAuthStateChange(
+                    (_event, session) => {
+                        const user = session?.user ?? null;
+                        setAuthUser(user);
+                        if (user) {
+                            loadAccountInfo(user);
+                        } else {
+                            setAccountInfo(null);
+                        }
+                    }
+                );
+                return () => subscription.unsubscribe();
+            }, []);
+
+            // アカウント情報の取得
+            const loadAccountInfo = async (user) => {
+                try {
+                    const { data, error } = await supabase.from('accounts').select('*').eq('auth_uid', user.id).single();
+                    if (error) {
+                        console.warn('accounts テーブルからの取得失敗:', error);
+                        // フォールバック: localStorage から表示名を取得
+                        const savedName = localStorage.getItem('sw_account_name_' + user.id);
+                        setAccountInfo({ id: user.id, display_name: savedName || user.email, auth_uid: user.id });
+                        return;
+                    }
+                    setAccountInfo(data);
+                } catch (e) {
+                    console.error('アカウント情報の取得エラー:', e);
+                    setAccountInfo({ id: user.id, display_name: user.email, auth_uid: user.id });
+                }
             };
 
-            // 未認証 → パスワード入力ページ
-            if (!authenticated) {
-                return <LoginPage onLogin={() => setAuthenticated(true)} />;
+            const handleLogout = async () => {
+                await supabase.auth.signOut();
+                setAuthUser(null);
+                setAccountInfo(null);
+            };
+
+            // ロード中
+            if (authLoading) {
+                return (
+                    <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-indigo-50 flex items-center justify-center">
+                        <div className="text-center">
+                            <div style={{ display: 'inline-block', width: '3rem', height: '3rem', border: '4px solid #e5e7eb', borderTop: '4px solid #a78bfa', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+                            <p className="text-gray-500 mt-4 font-medium">読み込み中...</p>
+                        </div>
+                    </div>
+                );
+            }
+
+            // 未認証 → ログイン/登録ページ
+            if (!authUser) {
+                return <LoginPage onLogin={() => {}} />;
             }
 
             // 認証済み → メインアプリ
-            return <MainApp authUser={{}} onLogout={handleLogout} />;
+            return <MainApp authUser={authUser} accountInfo={accountInfo} onLogout={handleLogout} />;
         };
 
         // --- メインアプリ (ログイン後) ---
-        const MainApp = ({ authUser, onLogout }) => {
+        const MainApp = ({ authUser, accountInfo, onLogout }) => {
+            // アカウントID（データ分離用）
+            const accountId = accountInfo?.id || authUser?.id || 'default';
+            const accountName = accountInfo?.display_name || authUser?.email || '';
+
+            // localStorage キーヘルパー（アカウント別）
+            const lsKey = (key) => `sw_${key}_${accountId}`;
+
             // State
             const [view, setView] = useState('input');
             const [users, setUsers] = useState(() => {
                 try {
-                    const saved = localStorage.getItem('sw_users');
+                    // 新形式のキーを優先、なければ旧形式から読み込み
+                    const saved = localStorage.getItem(lsKey('users')) || localStorage.getItem('sw_users');
                     return saved ? JSON.parse(saved) : [];
                 } catch (e) { return []; }
             });
             const [records, setRecords] = useState(() => {
                 try {
-                    const saved = localStorage.getItem('sw_records');
+                    const saved = localStorage.getItem(lsKey('records')) || localStorage.getItem('sw_records');
                     return saved ? JSON.parse(saved) : [];
                 } catch (e) { return []; }
             });
@@ -400,13 +551,13 @@
             // --- 保存済み月次評価データ ---
             const [savedMonthlyEvals, setSavedMonthlyEvals] = useState(() => {
                 try {
-                    const saved = localStorage.getItem('sw_monthly_evaluations');
+                    const saved = localStorage.getItem(lsKey('monthly_evaluations')) || localStorage.getItem('sw_monthly_evaluations');
                     return saved ? JSON.parse(saved) : [];
                 } catch (e) { return []; }
             });
 
             // localStorage バックアップ（月次評価）
-            useEffect(() => { localStorage.setItem('sw_monthly_evaluations', JSON.stringify(savedMonthlyEvals)); }, [savedMonthlyEvals]);
+            useEffect(() => { localStorage.setItem(lsKey('monthly_evaluations'), JSON.stringify(savedMonthlyEvals)); }, [savedMonthlyEvals]);
 
             const [monthlyExcelFile, setMonthlyExcelFile] = useState(null);
             const [bulkCreating, setBulkCreating] = useState(false);
@@ -1303,12 +1454,24 @@ ${pages}
             // --- データ読み込み（Supabase優先、localStorageフォールバック） ---
             const loadData = async () => {
                 try {
-                    // Supabaseから読み込み
-                    const { data: usersData, error: usersError } = await supabase.from('users').select('*');
+                    // Supabaseから読み込み（account_id でフィルタ）
+                    let usersQuery = supabase.from('users').select('*');
+                    let recordsQuery = supabase.from('records').select('*');
+
+                    // account_id カラムが存在する場合はフィルタを適用
+                    // 既存データ（account_id=NULL）も含めて取得する
+                    try {
+                        usersQuery = supabase.from('users').select('*').or(`account_id.eq.${accountId},account_id.is.null`);
+                        recordsQuery = supabase.from('records').select('*').or(`account_id.eq.${accountId},account_id.is.null`);
+                    } catch (filterErr) {
+                        console.warn('account_id フィルタ適用失敗、全データ取得:', filterErr);
+                    }
+
+                    const { data: usersData, error: usersError } = await usersQuery;
                     if (usersError) throw usersError;
                     const mappedUsers = (usersData || []).map(u => ({ id: u.id, name: u.name, furigana: u.furigana || '', number: u.number || '' }));
 
-                    const { data: recordsData, error: recordsError } = await supabase.from('records').select('*');
+                    const { data: recordsData, error: recordsError } = await recordsQuery;
                     if (recordsError) throw recordsError;
                     const mappedRecords = (recordsData || []).map(r => ({
                         id: r.id,
@@ -1327,17 +1490,65 @@ ${pages}
 
                     setUsers(mappedUsers);
                     setRecords(mappedRecords);
-                    // localStorageにバックアップ保存
-                    localStorage.setItem('sw_users', JSON.stringify(mappedUsers));
-                    localStorage.setItem('sw_records', JSON.stringify(mappedRecords));
+                    // localStorageにバックアップ保存（アカウント別）
+                    localStorage.setItem(lsKey('users'), JSON.stringify(mappedUsers));
+                    localStorage.setItem(lsKey('records'), JSON.stringify(mappedRecords));
                     setSupabaseStatus('connected');
-                    console.log(`✅ Supabaseからデータを読み込みました（利用者: ${mappedUsers.length}名、記録: ${mappedRecords.length}件）`);
+                    console.log(`✅ Supabaseからデータを読み込みました（利用者: ${mappedUsers.length}名、記録: ${mappedRecords.length}件、アカウント: ${accountName}）`);
+
+                    // 既存データのマイグレーション: account_id が NULL のデータを現在のアカウントに紐づけ
+                    const nullAccountUsers = (usersData || []).filter(u => !u.account_id);
+                    const nullAccountRecords = (recordsData || []).filter(r => !r.account_id);
+                    if (nullAccountUsers.length > 0 || nullAccountRecords.length > 0) {
+                        console.log(`🔄 マイグレーション: account_id 未設定のデータを現在のアカウントに紐づけます (users: ${nullAccountUsers.length}件, records: ${nullAccountRecords.length}件)`);
+                        for (const u of nullAccountUsers) {
+                            await supabase.from('users').update({ account_id: accountId }).eq('id', u.id).catch(e => console.warn('マイグレーション失敗(user):', e));
+                        }
+                        for (const r of nullAccountRecords) {
+                            await supabase.from('records').update({ account_id: accountId }).eq('id', r.id).catch(e => console.warn('マイグレーション失敗(record):', e));
+                        }
+                    }
+
+                    // 月次評価データもSupabaseから取得試行
+                    try {
+                        const { data: monthlyData, error: monthlyError } = await supabase.from('monthly_evaluations').select('*').or(`account_id.eq.${accountId},account_id.is.null`);
+                        if (!monthlyError && monthlyData && monthlyData.length > 0) {
+                            const mappedMonthly = monthlyData.map(m => ({
+                                id: m.id,
+                                userId: m.user_id,
+                                targetYear: m.target_year,
+                                targetMonth: m.target_month,
+                                implementationDate: m.implementation_date || '',
+                                timeStart: m.time_start || '10:00',
+                                timeEnd: m.time_end || '10:15',
+                                method: m.method || 'commute',
+                                methodOther: m.method_other || '',
+                                trainingGoal: m.training_goal || '',
+                                activities: m.activities || '',
+                                achievement: m.achievement || '',
+                                issues: m.issues || '',
+                                improvementPlan: m.improvement_plan || '',
+                                healthNotes: m.health_notes || '',
+                                otherNotes: m.other_notes || '',
+                                workValidity: m.work_validity || '',
+                                evaluator: m.evaluator || '近藤恵子',
+                                previousEvalDate: m.previous_eval_date || '',
+                                createdAt: m.created_at || '',
+                                updatedAt: m.updated_at || ''
+                            }));
+                            setSavedMonthlyEvals(mappedMonthly);
+                            localStorage.setItem(lsKey('monthly_evaluations'), JSON.stringify(mappedMonthly));
+                            console.log(`✅ 月次評価データも取得しました: ${mappedMonthly.length}件`);
+                        }
+                    } catch (monthlyErr) {
+                        console.warn('月次評価テーブルからの取得失敗（テーブル未作成の可能性）:', monthlyErr);
+                    }
                 } catch (e) {
                     console.warn('Supabase読み込み失敗、localStorageから復元:', e);
                     // フォールバック: localStorageから読み込み
                     try {
-                        const savedUsers = localStorage.getItem('sw_users');
-                        const savedRecords = localStorage.getItem('sw_records');
+                        const savedUsers = localStorage.getItem(lsKey('users')) || localStorage.getItem('sw_users');
+                        const savedRecords = localStorage.getItem(lsKey('records')) || localStorage.getItem('sw_records');
                         if (savedUsers) {
                             const parsed = JSON.parse(savedUsers);
                             if (parsed.length > 0) setUsers(parsed);
@@ -1355,28 +1566,54 @@ ${pages}
                 }
             };
 
-            // ローカル保存ヘルパー（Supabase不要）
-            const saveUserLocal = (user) => {
-                console.log('💾 ユーザー保存:', user.name);
+            // Supabase 書き込みヘルパー
+            const saveUserToSupabase = async (user) => {
+                try {
+                    await supabase.from('users').upsert({
+                        id: user.id,
+                        name: user.name,
+                        furigana: user.furigana || '',
+                        number: user.number || '',
+                        account_id: accountId
+                    });
+                    console.log('💾 Supabaseにユーザー保存:', user.name);
+                } catch (e) { console.warn('Supabase書き込み失敗(user):', e); }
             };
 
-            const deleteUserLocal = (userId) => {
-                console.log('🗑️ ユーザー削除:', userId);
+            const deleteUserFromSupabase = async (userId) => {
+                try {
+                    await supabase.from('users').delete().eq('id', userId);
+                    console.log('🗑️ Supabaseからユーザー削除:', userId);
+                } catch (e) { console.warn('Supabase削除失敗(user):', e); }
             };
 
-            const saveRecordLocal = (record) => {
-                console.log('💾 記録保存:', record.id);
+            const saveRecordToSupabase = async (record) => {
+                try {
+                    await supabase.from('records').upsert({
+                        id: record.id,
+                        user_id: record.userId,
+                        implementation_date: record.implementationDate,
+                        previous_date: record.previousDate,
+                        period_start: record.periodStart,
+                        period_end: record.periodEnd,
+                        selected_method: record.selectedMethod,
+                        condition: record.condition,
+                        work_content: record.workContent,
+                        goals: record.goals,
+                        recorder: record.recorder,
+                        manager: record.manager,
+                        account_id: accountId
+                    });
+                    console.log('💾 Supabaseに記録保存:', record.id);
+                } catch (e) { console.warn('Supabase書き込み失敗(record):', e); }
             };
 
-            const deleteRecordLocal = (recordId) => {
-                console.log('🗑️ 記録削除:', recordId);
+            const deleteRecordFromSupabase = async (recordId) => {
+                try {
+                    await supabase.from('records').delete().eq('id', recordId);
+                    console.log('🗑️ Supabaseから記録削除:', recordId);
+                } catch (e) { console.warn('Supabase削除失敗(record):', e); }
             };
-
-            // 旧名互換用（コード内の他の呼び出しに対応）
-            const saveUserToSupabase = saveUserLocal;
-            const deleteUserFromSupabase = deleteUserLocal;
-            const saveRecordToSupabase = saveRecordLocal;
-            const deleteRecordFromSupabase = deleteRecordLocal;
 
             // --- 前回実施日の一括修復 ---
             const [prevDateFixDone, setPrevDateFixDone] = useState(false);
@@ -1408,7 +1645,7 @@ ${pages}
                     if (fixedRecords.length > 0) {
                         console.log(`🔧 前回実施日を修復: ${fixedRecords.length}件`);
                         setRecords(updatedRecords);
-                        localStorage.setItem('sw_records', JSON.stringify(updatedRecords));
+                        localStorage.setItem(lsKey('records'), JSON.stringify(updatedRecords));
                         console.log(`✅ 前回実施日の修復完了: ${fixedRecords.length}件`);
                     }
                     setPrevDateFixDone(true);
@@ -1422,9 +1659,9 @@ ${pages}
                 loadData();
             }, []);
 
-            // localStorage バックアップ保存（空配列での上書きを防止）
-            useEffect(() => { if (users.length > 0) localStorage.setItem('sw_users', JSON.stringify(users)); }, [users]);
-            useEffect(() => { if (records.length > 0) localStorage.setItem('sw_records', JSON.stringify(records)); }, [records]);
+            // localStorage バックアップ保存（空配列での上書きを防止、アカウント別キー）
+            useEffect(() => { if (users.length > 0) localStorage.setItem(lsKey('users'), JSON.stringify(users)); }, [users]);
+            useEffect(() => { if (records.length > 0) localStorage.setItem(lsKey('records'), JSON.stringify(records)); }, [records]);
 
             // --- 週評価 一括自動作成: 対象利用者を算出 ---
             const prepareAutoCreate = () => {
@@ -2626,12 +2863,11 @@ ${baseContext}
                 const bodyFont = { sz: 10, name: 'ＭＳ Ｐゴシック' };
                 const titleFont = { bold: true, sz: 18, name: 'ＭＳ Ｐゴシック' };
                 const noteFont = { sz: 8, name: 'ＭＳ Ｐゴシック' };
-                const centerAlign = { horizontal: 'center', vertical: 'center', wrapText: true };
                 const leftAlign = { horizontal: 'left', vertical: 'center', wrapText: true };
                 const topLeftAlign = { horizontal: 'left', vertical: 'top', wrapText: true };
 
                 const methodMap = { commute: '通所', visit: '訪問', other: 'その他' };
-                const methodStr = d.method === 'other' ? `${d.methodOther}` : (methodMap[d.method] || d.method);
+                const methodStr = d.method === 'other' ? d.methodOther : (methodMap[d.method] || d.method);
 
                 // 実施方法のチェックボックス表現
                 const getCheck = (key) => d.method === key ? '☑' : '□';
@@ -2971,9 +3207,18 @@ ${baseContext}
                             </button>
 
                         </nav>
-                        <div className="p-4 border-t">
-                            <button onClick={onLogout} className="w-full flex items-center gap-2 px-4 py-2 rounded-lg text-sm text-gray-500 hover:bg-gray-100 transition font-medium">
-                                <Icons.LogOut /> 退出する
+                        <div className="p-4 border-t space-y-3">
+                            <div className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-pink-50 to-purple-50 rounded-lg">
+                                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-pink-400 to-purple-500 flex items-center justify-center text-white text-xs font-bold shadow">
+                                    {accountName ? accountName.charAt(0) : <Icons.User />}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <div className="text-sm font-bold text-gray-700 truncate">{accountName || 'ログイン中'}</div>
+                                    <div className="text-xs text-gray-400 truncate">{authUser?.email || ''}</div>
+                                </div>
+                            </div>
+                            <button onClick={onLogout} className="w-full flex items-center gap-2 px-4 py-2 rounded-lg text-sm text-gray-500 hover:bg-red-50 hover:text-red-500 transition font-medium">
+                                <Icons.LogOut /> ログアウト
                             </button>
                         </div>
                     </div>

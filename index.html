@@ -233,106 +233,90 @@
             return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
         };
 
-                // --- ログイン/アカウント登録ページ コンポーネント ---
+                        // --- ログイン/アカウント選択ページ コンポーネント ---
         const LoginPage = ({ onLogin }) => {
-            const [mode, setMode] = useState('login'); // 'login' or 'register'
-            const [email, setEmail] = useState('rashikulab.kajimachi@gmail.com');
-            const [password, setPassword] = useState('Rashikulabkajimachi5617');
+            const [mode, setMode] = useState('select'); // 'select', 'login', 'register'
+            const [email, setEmail] = useState('');
+            const [password, setPassword] = useState('');
             const [displayName, setDisplayName] = useState('');
             const [error, setError] = useState('');
             const [loading, setLoading] = useState(false);
             const [shake, setShake] = useState(false);
 
-            // 「小倉鍛冶町」アカウントでのワンクリック即時ログイン
-            const handleQuickLogin = async () => {
+            // アカウント直接ログイン処理
+            const loginAsAccount = (account) => {
+                localStorage.setItem('sw_local_session', JSON.stringify(account));
+                localStorage.setItem('sw_current_account_id', account.id);
+                onLogin(account);
+            };
+
+            // 「小倉鍛冶町」アカウント（既存データあり）
+            const handleOguraKajimachiLogin = async () => {
                 setLoading(true);
-                setError('');
-                const targetEmail = 'rashikulab.kajimachi@gmail.com';
-                const targetPassword = 'Rashikulabkajimachi5617';
-                const targetName = '小倉鍛冶町';
-
-                try {
-                    const { data, error: authError } = await supabase.auth.signInWithPassword({ email: targetEmail, password: targetPassword });
-                    if (!authError && data.user) {
-                        const acc = { id: data.user.id, display_name: targetName, email: targetEmail, auth_uid: data.user.id };
-                        localStorage.setItem('sw_local_session', JSON.stringify(acc));
-                        onLogin(acc);
-                        return;
-                    }
-                } catch (e) {
-                    console.warn('Supabase Auth bypass:', e);
-                }
-
-                // メール認証エラー回避用のローカルセッション作成
-                const localAccount = { id: 'ogura_kajimachi', display_name: targetName, email: targetEmail, auth_uid: 'ogura_kajimachi' };
-                localStorage.setItem('sw_local_session', JSON.stringify(localAccount));
-                onLogin(localAccount);
+                const acc = {
+                    id: 'ogura_kajimachi',
+                    display_name: '小倉鍛冶町',
+                    email: 'rashikulab.kajimachi@gmail.com',
+                    auth_uid: 'ogura_kajimachi'
+                };
+                loginAsAccount(acc);
                 setLoading(false);
             };
 
-            const handleLogin = async (e) => {
+            // 「小倉」アカウント（新規・空データ）
+            const handleOguraLogin = async () => {
+                setLoading(true);
+                const acc = {
+                    id: 'ogura',
+                    display_name: '小倉',
+                    email: 'ogura@rashikulab.com',
+                    auth_uid: 'ogura'
+                };
+                loginAsAccount(acc);
+                setLoading(false);
+            };
+
+            const handleLoginSubmit = async (e) => {
                 e.preventDefault();
                 setError('');
                 setLoading(true);
 
-                // 小倉鍛冶町のアカウント情報を検知した場合
-                if (email.trim().toLowerCase() === 'rashikulab.kajimachi@gmail.com') {
-                    await handleQuickLogin();
+                const lowerEmail = email.trim().toLowerCase();
+                if (lowerEmail.includes('kajimachi') || lowerEmail.includes('鍛冶町')) {
+                    handleOguraKajimachiLogin();
+                    return;
+                } else if (lowerEmail.includes('ogura') || lowerEmail.includes('小倉')) {
+                    handleOguraLogin();
                     return;
                 }
 
+                // 任意のアカウントでのログイン
                 try {
                     const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
-                    if (authError) {
-                        // メール未確認エラー等の場合でも即時利用可能にする
-                        const uid = 'user_' + btoa(email).replace(/=/g, '');
-                        const localAcc = { id: uid, display_name: email.split('@')[0], email: email, auth_uid: uid };
-                        localStorage.setItem('sw_local_session', JSON.stringify(localAcc));
-                        onLogin(localAcc);
+                    if (!authError && data.user) {
+                        const acc = { id: data.user.id, display_name: email.split('@')[0], email: email, auth_uid: data.user.id };
+                        loginAsAccount(acc);
                         return;
                     }
-                    if (data.user) {
-                        const acc = { id: data.user.id, display_name: email.split('@')[0], email: email, auth_uid: data.user.id };
-                        localStorage.setItem('sw_local_session', JSON.stringify(acc));
-                        onLogin(acc);
-                    }
-                } catch (err) {
-                    console.error('ログインエラー:', err);
-                    let msg = 'ログインに失敗しました';
-                    if (err.message?.includes('Invalid login')) msg = 'メールアドレスまたはパスワードが正しくありません';
-                    setError(msg);
-                    setShake(true);
-                    setTimeout(() => setShake(false), 500);
-                } finally {
-                    setLoading(false);
-                }
+                } catch (e) {}
+
+                // カスタムアカウント生成
+                const customUid = 'acc_' + btoa(email).replace(/=/g, '').substring(0, 12);
+                const customAcc = { id: customUid, display_name: email.split('@')[0], email: email, auth_uid: customUid };
+                loginAsAccount(customAcc);
+                setLoading(false);
             };
 
-            const handleRegister = async (e) => {
+            const handleRegisterSubmit = async (e) => {
                 e.preventDefault();
                 setError('');
                 if (!displayName.trim()) { setError('アカウント名を入力してください'); return; }
-                if (password.length < 6) { setError('パスワードは6文字以上で入力してください'); return; }
                 setLoading(true);
-                try {
-                    const { data, error: authError } = await supabase.auth.signUp({ email, password });
-                    const uid = data?.user?.id || 'user_' + Date.now();
-                    const newAccount = { id: uid, display_name: displayName.trim(), email: email, auth_uid: uid };
-                    localStorage.setItem('sw_account_name_' + uid, displayName.trim());
-                    localStorage.setItem('sw_local_session', JSON.stringify(newAccount));
-                    
-                    alert('✅ アカウント「' + displayName.trim() + '」を作成しました。そのままログインします！');
-                    onLogin(newAccount);
-                } catch (err) {
-                    console.error('登録エラー:', err);
-                    let msg = 'アカウント登録に失敗しました';
-                    if (err.message?.includes('already registered')) msg = 'このメールアドレスは既に登録されています';
-                    setError(msg);
-                    setShake(true);
-                    setTimeout(() => setShake(false), 500);
-                } finally {
-                    setLoading(false);
-                }
+
+                const newUid = 'acc_' + Date.now();
+                const newAcc = { id: newUid, display_name: displayName.trim(), email: email || `${newUid}@app.local`, auth_uid: newUid };
+                loginAsAccount(newAcc);
+                setLoading(false);
             };
 
             const LogoIcon = () => (
@@ -348,79 +332,99 @@
 
             return (
                 <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-indigo-50 flex items-center justify-center p-4">
-                    <div className="w-full max-w-sm">
-                        <div className="text-center mb-6">
+                    <div className="w-full max-w-md">
+                        <div className="text-center mb-8">
                             <div className="flex justify-center mb-4"><LogoIcon /></div>
                             <h1 className="text-3xl font-bold bg-gradient-to-r from-pink-500 to-purple-500 bg-clip-text text-transparent">在宅書類自動作成</h1>
-                            <p className="text-gray-400 mt-2 text-sm">🏠 在宅就労支援の書類作成を、もっとかんたんに。</p>
+                            <p className="text-gray-400 mt-2 text-sm">🏠 ログインするアカウントを選択してください</p>
                         </div>
 
-                        {/* 小倉鍛冶町クイックログインカード */}
-                        <div className="mb-4 bg-gradient-to-r from-amber-500 to-orange-500 p-4 rounded-2xl text-white shadow-lg shadow-orange-100 text-center">
-                            <div className="text-xs font-bold uppercase tracking-wider text-amber-100 mb-1">既存データ紐づけ完了</div>
-                            <div className="font-bold text-lg mb-2">🏢 小倉鍛冶町 アカウント</div>
-                            <button
-                                onClick={handleQuickLogin}
-                                disabled={loading}
-                                className="w-full py-2.5 bg-white text-orange-600 font-bold rounded-xl shadow hover:bg-orange-50 transition flex items-center justify-center gap-2 text-sm"
+                        {/* 2つのメインアカウント選択カード */}
+                        <div className="space-y-4 mb-6">
+                            {/* アカウント1: 小倉鍛冶町（既存データあり） */}
+                            <div
+                                onClick={handleOguraKajimachiLogin}
+                                className="glass p-5 rounded-2xl cursor-pointer border-2 border-transparent hover:border-pink-400 hover:shadow-xl transition-all group flex items-center gap-4 bg-white"
                             >
-                                🚀 「小倉鍛冶町」でログインする
-                            </button>
-                        </div>
-
-                        <div className={`glass p-8 rounded-2xl ${shake ? 'animate-bounce' : ''}`} style={shake ? {animation: 'shake 0.5s'} : {}}>
-                            {/* タブ切り替え */}
-                            <div className="flex mb-6 bg-gray-100 rounded-xl p-1">
-                                <button
-                                    onClick={() => { setMode('login'); setError(''); }}
-                                    className={`flex-1 py-2 text-sm font-bold rounded-lg transition ${mode === 'login' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                                >ログイン</button>
-                                <button
-                                    onClick={() => { setMode('register'); setError(''); }}
-                                    className={`flex-1 py-2 text-sm font-bold rounded-lg transition ${mode === 'register' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                                >新規登録</button>
+                                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center text-white text-xl font-bold shadow-md group-hover:scale-105 transition-transform">
+                                    🏢
+                                </div>
+                                <div className="flex-1">
+                                    <div className="flex items-center gap-2">
+                                        <h3 className="text-lg font-bold text-gray-800">小倉鍛冶町</h3>
+                                        <span className="text-xs bg-pink-100 text-pink-700 font-bold px-2 py-0.5 rounded-full">既存データあり</span>
+                                    </div>
+                                    <p className="text-xs text-gray-400 mt-0.5">rashikulab.kajimachi@gmail.com</p>
+                                </div>
+                                <div className="text-pink-500 font-bold text-sm group-hover:translate-x-1 transition-transform">
+                                    ログイン →
+                                </div>
                             </div>
 
-                            {error && <div className="bg-red-50 text-red-500 p-3 rounded-lg text-sm mb-4 text-center font-medium">{error}</div>}
+                            {/* アカウント2: 小倉（新規・空データ） */}
+                            <div
+                                onClick={handleOguraLogin}
+                                className="glass p-5 rounded-2xl cursor-pointer border-2 border-transparent hover:border-indigo-400 hover:shadow-xl transition-all group flex items-center gap-4 bg-white"
+                            >
+                                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center text-white text-xl font-bold shadow-md group-hover:scale-105 transition-transform">
+                                    🏢
+                                </div>
+                                <div className="flex-1">
+                                    <div className="flex items-center gap-2">
+                                        <h3 className="text-lg font-bold text-gray-800">小倉</h3>
+                                        <span className="text-xs bg-indigo-100 text-indigo-700 font-bold px-2 py-0.5 rounded-full">新規（データ空）</span>
+                                    </div>
+                                    <p className="text-xs text-gray-400 mt-0.5">ogura@rashikulab.com</p>
+                                </div>
+                                <div className="text-indigo-500 font-bold text-sm group-hover:translate-x-1 transition-transform">
+                                    ログイン →
+                                </div>
+                            </div>
+                        </div>
 
-                            {mode === 'login' ? (
-                                <form onSubmit={handleLogin}>
-                                    <div className="mb-2 text-center">
-                                        <span className="text-4xl">🔑</span>
+                        {/* その他のログイン/新規登録フォーム */}
+                        <div className={`glass p-6 rounded-2xl ${shake ? 'animate-bounce' : ''}`}>
+                            <div className="flex mb-4 bg-gray-100 rounded-xl p-1 text-xs">
+                                <button
+                                    onClick={() => { setMode('login'); setError(''); }}
+                                    className={`flex-1 py-1.5 font-bold rounded-lg transition ${mode === 'login' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                                >メールログイン</button>
+                                <button
+                                    onClick={() => { setMode('register'); setError(''); }}
+                                    className={`flex-1 py-1.5 font-bold rounded-lg transition ${mode === 'register' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                                >新規アカウント作成</button>
+                            </div>
+
+                            {error && <div className="bg-red-50 text-red-500 p-2.5 rounded-lg text-xs mb-3 text-center font-medium">{error}</div>}
+
+                            {mode === 'login' && (
+                                <form onSubmit={handleLoginSubmit}>
+                                    <div className="mb-3">
+                                        <label className="block text-xs font-bold text-gray-600 mb-1">メールアドレス / アカウント名</label>
+                                        <input type="text" className="input-field text-sm" value={email} onChange={e => setEmail(e.target.value)} placeholder="例：小倉 または 小倉鍛冶町" required />
                                     </div>
-                                    <h2 className="text-lg font-bold text-gray-700 mb-4 text-center">アカウントにログイン</h2>
                                     <div className="mb-4">
-                                        <label className="block text-sm font-bold text-gray-600 mb-1">メールアドレス</label>
-                                        <input type="email" className="input-field" value={email} onChange={e => setEmail(e.target.value)} placeholder="example@mail.com" required autoFocus />
+                                        <label className="block text-xs font-bold text-gray-600 mb-1">パスワード</label>
+                                        <input type="password" className="input-field text-sm" value={password} onChange={e => setPassword(e.target.value)} placeholder="パスワード" />
                                     </div>
-                                    <div className="mb-6">
-                                        <label className="block text-sm font-bold text-gray-600 mb-1">パスワード</label>
-                                        <input type="password" className="input-field" value={password} onChange={e => setPassword(e.target.value)} placeholder="パスワードを入力" required />
-                                    </div>
-                                    <button type="submit" disabled={loading} className="w-full h-12 text-base font-bold rounded-xl text-white transition disabled:opacity-50" style={{background: 'linear-gradient(135deg, #f472b6 0%, #a78bfa 100%)'}}>
-                                        {loading ? '⏳ ログイン中...' : 'ログイン'}
+                                    <button type="submit" disabled={loading} className="w-full py-2.5 text-sm font-bold rounded-xl text-white transition shadow-md" style={{background: 'linear-gradient(135deg, #f472b6 0%, #a78bfa 100%)'}}>
+                                        ログイン
                                     </button>
                                 </form>
-                            ) : (
-                                <form onSubmit={handleRegister}>
-                                    <div className="mb-2 text-center">
-                                        <span className="text-4xl">✨</span>
-                                    </div>
-                                    <h2 className="text-lg font-bold text-gray-700 mb-4 text-center">新規アカウント登録</h2>
-                                    <div className="mb-4">
-                                        <label className="block text-sm font-bold text-gray-600 mb-1">アカウント名（事業所名）</label>
-                                        <input type="text" className="input-field" value={displayName} onChange={e => setDisplayName(e.target.value)} placeholder="例：小倉鍛冶町" required />
+                            )}
+
+                            {mode === 'register' && (
+                                <form onSubmit={handleRegisterSubmit}>
+                                    <div className="mb-3">
+                                        <label className="block text-xs font-bold text-gray-600 mb-1">アカウント名（事業所名）</label>
+                                        <input type="text" className="input-field text-sm" value={displayName} onChange={e => setDisplayName(e.target.value)} placeholder="例：新事業所名" required />
                                     </div>
                                     <div className="mb-4">
-                                        <label className="block text-sm font-bold text-gray-600 mb-1">メールアドレス</label>
-                                        <input type="email" className="input-field" value={email} onChange={e => setEmail(e.target.value)} placeholder="example@mail.com" required />
+                                        <label className="block text-xs font-bold text-gray-600 mb-1">メールアドレス（任意）</label>
+                                        <input type="email" className="input-field text-sm" value={email} onChange={e => setEmail(e.target.value)} placeholder="example@mail.com" />
                                     </div>
-                                    <div className="mb-6">
-                                        <label className="block text-sm font-bold text-gray-600 mb-1">パスワード</label>
-                                        <input type="password" className="input-field" value={password} onChange={e => setPassword(e.target.value)} placeholder="6文字以上" required />
-                                    </div>
-                                    <button type="submit" disabled={loading} className="w-full h-12 text-base font-bold rounded-xl text-white transition disabled:opacity-50" style={{background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)'}}>
-                                        {loading ? '⏳ 登録中...' : 'アカウントを作成'}
+                                    <button type="submit" disabled={loading} className="w-full py-2.5 text-sm font-bold rounded-xl text-white transition shadow-md" style={{background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)'}}>
+                                        アカウントを作成してログイン
                                     </button>
                                 </form>
                             )}
@@ -437,9 +441,8 @@
             const [authLoading, setAuthLoading] = useState(true);
             const [accountInfo, setAccountInfo] = useState(null); // { id, display_name, auth_uid }
 
-            // 初期化・自動ログイン
+            // 初期化
             useEffect(() => {
-                // 1. ローカルセッションの確認
                 const savedLocal = localStorage.getItem('sw_local_session');
                 if (savedLocal) {
                     try {
@@ -451,55 +454,21 @@
                     } catch (e) {}
                 }
 
-                // 2. デフォルトで「小倉鍛冶町」アカウントを自動セットアップ＆ログイン
-                const oguraAccount = {
+                // デフォルト: 初回は「小倉鍛冶町」を自動選択
+                const defaultAcc = {
                     id: 'ogura_kajimachi',
                     display_name: '小倉鍛冶町',
                     email: 'rashikulab.kajimachi@gmail.com',
                     auth_uid: 'ogura_kajimachi'
                 };
-                localStorage.setItem('sw_local_session', JSON.stringify(oguraAccount));
-                setAccountInfo(oguraAccount);
-                setAuthUser({ id: oguraAccount.id, email: oguraAccount.email });
+                localStorage.setItem('sw_local_session', JSON.stringify(defaultAcc));
+                setAccountInfo(defaultAcc);
+                setAuthUser({ id: defaultAcc.id, email: defaultAcc.email });
                 setAuthLoading(false);
-
-                // Supabase Auth セッション監視（バックグラウンド同期）
-                supabase.auth.getSession().then(({ data: { session } }) => {
-                    if (session?.user) {
-                        setAuthUser(session.user);
-                        loadAccountInfo(session.user);
-                    }
-                });
-
-                const { data: { subscription } } = supabase.auth.onAuthStateChange(
-                    (_event, session) => {
-                        if (session?.user) {
-                            setAuthUser(session.user);
-                            loadAccountInfo(session.user);
-                        }
-                    }
-                );
-                return () => subscription.unsubscribe();
             }, []);
 
-            // アカウント情報の取得
-            const loadAccountInfo = async (user) => {
-                try {
-                    const { data, error } = await supabase.from('accounts').select('*').eq('auth_uid', user.id).single();
-                    if (error) {
-                        const savedName = localStorage.getItem('sw_account_name_' + user.id) || '小倉鍛冶町';
-                        setAccountInfo({ id: user.id, display_name: savedName, auth_uid: user.id, email: user.email });
-                        return;
-                    }
-                    setAccountInfo(data);
-                } catch (e) {
-                    setAccountInfo({ id: user.id, display_name: '小倉鍛冶町', auth_uid: user.id, email: user.email });
-                }
-            };
-
-            const handleLogout = async () => {
+            const handleLogout = () => {
                 localStorage.removeItem('sw_local_session');
-                await supabase.auth.signOut().catch(() => {});
                 setAuthUser(null);
                 setAccountInfo(null);
             };
@@ -510,7 +479,6 @@
                 setAuthUser({ id: account.id, email: account.email });
             };
 
-            // ロード中
             if (authLoading) {
                 return (
                     <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-indigo-50 flex items-center justify-center">
@@ -522,12 +490,10 @@
                 );
             }
 
-            // 未認証 → ログイン/登録ページ
             if (!authUser) {
                 return <LoginPage onLogin={handleLoginSuccess} />;
             }
 
-            // 認証済み → メインアプリ
             return <MainApp authUser={authUser} accountInfo={accountInfo} onLogout={handleLogout} />;
         };
 
@@ -1552,6 +1518,25 @@ ${pages}
                         periodStart: r.period_start,
                         periodEnd: r.period_end,
                         selectedMethod: r.selected_method || r.methods ? (typeof r.selected_method === 'string' ? r.selected_method : (r.methods && typeof r.methods === 'object' ? Object.keys(r.methods).find(k => r.methods[k]) || 'commute' : 'commute')) : 'commute',
+                        co            // --- データ読み込み（アカウントごとの厳格な分離） ---
+            const loadData = async () => {
+                try {
+                    // Supabaseから読み込み（account_id でフィルタ）
+                    let usersQuery = supabase.from('users').select('*').eq('account_id', accountId);
+                    let recordsQuery = supabase.from('records').select('*').eq('account_id', accountId);
+
+                    const { data: usersData, error: usersError } = await usersQuery;
+                    const { data: recordsData, error: recordsError } = await recordsQuery;
+
+                    let mappedUsers = (usersData || []).map(u => ({ id: u.id, name: u.name, furigana: u.furigana || '', number: u.number || '' }));
+                    let mappedRecords = (recordsData || []).map(r => ({
+                        id: r.id,
+                        userId: r.user_id,
+                        implementationDate: r.implementation_date,
+                        previousDate: r.previous_date,
+                        periodStart: r.period_start,
+                        periodEnd: r.period_end,
+                        selectedMethod: r.selected_method || 'commute',
                         condition: r.condition || '',
                         workContent: r.work_content || '',
                         goals: r.goals || '',
@@ -1559,92 +1544,63 @@ ${pages}
                         manager: r.manager || '近藤恵子'
                     }));
 
+                    // 「小倉鍛冶町」アカウントのみ既存レガシーデータを引き継ぐ
+                    if (accountId === 'ogura_kajimachi') {
+                        // Supabaseにaccount_id未設定のデータがある場合
+                        const { data: legacyUsers } = await supabase.from('users').select('*').is('account_id', null);
+                        const { data: legacyRecords } = await supabase.from('records').select('*').is('account_id', null);
+                        
+                        if (legacyUsers && legacyUsers.length > 0) {
+                            const mappedLegacy = legacyUsers.map(u => ({ id: u.id, name: u.name, furigana: u.furigana || '', number: u.number || '' }));
+                            mappedUsers = [...mappedUsers, ...mappedLegacy.filter(lu => !mappedUsers.some(mu => mu.id === lu.id))];
+                        }
+                        if (legacyRecords && legacyRecords.length > 0) {
+                            const mappedLegacyR = legacyRecords.map(r => ({
+                                id: r.id, userId: r.user_id, implementationDate: r.implementation_date,
+                                previousDate: r.previous_date, periodStart: r.period_start, periodEnd: r.period_end,
+                                selectedMethod: r.selected_method || 'commute', condition: r.condition || '',
+                                workContent: r.work_content || '', goals: r.goals || '', recorder: r.recorder || '', manager: r.manager || '近藤恵子'
+                            }));
+                            mappedRecords = [...mappedRecords, ...mappedLegacyR.filter(lr => !mappedRecords.some(mr => mr.id === lr.id))];
+                        }
+                    }
+
                     setUsers(mappedUsers);
                     setRecords(mappedRecords);
-                    // localStorageにバックアップ保存（アカウント別）
                     localStorage.setItem(lsKey('users'), JSON.stringify(mappedUsers));
                     localStorage.setItem(lsKey('records'), JSON.stringify(mappedRecords));
                     setSupabaseStatus('connected');
-                    console.log(`✅ Supabaseからデータを読み込みました（利用者: ${mappedUsers.length}名、記録: ${mappedRecords.length}件、アカウント: ${accountName}）`);
-
-                    // 既存データのマイグレーション: account_id が NULL のデータを現在のアカウントに紐づけ
-                    const nullAccountUsers = (usersData || []).filter(u => !u.account_id);
-                    const nullAccountRecords = (recordsData || []).filter(r => !r.account_id);
-                    if (nullAccountUsers.length > 0 || nullAccountRecords.length > 0) {
-                        console.log(`🔄 マイグレーション: account_id 未設定のデータを現在のアカウントに紐づけます (users: ${nullAccountUsers.length}件, records: ${nullAccountRecords.length}件)`);
-                        for (const u of nullAccountUsers) {
-                            await supabase.from('users').update({ account_id: accountId }).eq('id', u.id).catch(e => console.warn('マイグレーション失敗(user):', e));
-                        }
-                        for (const r of nullAccountRecords) {
-                            await supabase.from('records').update({ account_id: accountId }).eq('id', r.id).catch(e => console.warn('マイグレーション失敗(record):', e));
-                        }
-                    }
-
-                    // 月次評価データもSupabaseから取得試行
-                    try {
-                        const { data: monthlyData, error: monthlyError } = await supabase.from('monthly_evaluations').select('*').or(`account_id.eq.${accountId},account_id.is.null`);
-                        if (!monthlyError && monthlyData && monthlyData.length > 0) {
-                            const mappedMonthly = monthlyData.map(m => ({
-                                id: m.id,
-                                userId: m.user_id,
-                                targetYear: m.target_year,
-                                targetMonth: m.target_month,
-                                implementationDate: m.implementation_date || '',
-                                timeStart: m.time_start || '10:00',
-                                timeEnd: m.time_end || '10:15',
-                                method: m.method || 'commute',
-                                methodOther: m.method_other || '',
-                                trainingGoal: m.training_goal || '',
-                                activities: m.activities || '',
-                                achievement: m.achievement || '',
-                                issues: m.issues || '',
-                                improvementPlan: m.improvement_plan || '',
-                                healthNotes: m.health_notes || '',
-                                otherNotes: m.other_notes || '',
-                                workValidity: m.work_validity || '',
-                                evaluator: m.evaluator || '近藤恵子',
-                                previousEvalDate: m.previous_eval_date || '',
-                                createdAt: m.created_at || '',
-                                updatedAt: m.updated_at || ''
-                            }));
-                            setSavedMonthlyEvals(mappedMonthly);
-                            localStorage.setItem(lsKey('monthly_evaluations'), JSON.stringify(mappedMonthly));
-                            console.log(`✅ 月次評価データも取得しました: ${mappedMonthly.length}件`);
-                        }
-                    } catch (monthlyErr) {
-                        console.warn('月次評価テーブルからの取得失敗（テーブル未作成の可能性）:', monthlyErr);
-                    }
+                    console.log(`✅ アカウント[${accountName}(${accountId})]のデータを読み込みました（利用者: ${mappedUsers.length}名、記録: ${mappedRecords.length}件）`);
                 } catch (e) {
                     console.warn('Supabase読み込み失敗、localStorageから復元:', e);
-                    // フォールバック: localStorageから読み込み
+                    // localStorageからの復元
                     try {
-                        const savedUsers = localStorage.getItem(lsKey('users')) || localStorage.getItem('sw_users');
-                        const savedRecords = localStorage.getItem(lsKey('records')) || localStorage.getItem('sw_records');
-                        const savedMonthly = localStorage.getItem(lsKey('monthly_evaluations')) || localStorage.getItem('sw_monthly_evaluations');
+                        let savedUsers = localStorage.getItem(lsKey('users'));
+                        let savedRecords = localStorage.getItem(lsKey('records'));
+                        let savedMonthly = localStorage.getItem(lsKey('monthly_evaluations'));
 
-                        if (savedUsers) {
-                            const parsed = JSON.parse(savedUsers);
-                            if (parsed.length > 0) {
-                                setUsers(parsed);
-                                localStorage.setItem(lsKey('users'), JSON.stringify(parsed));
-                            }
+                        // 「小倉鍛冶町」アカウントのみ、旧キー(sw_users, sw_records)から引き継ぎ
+                        if (accountId === 'ogura_kajimachi') {
+                            if (!savedUsers) savedUsers = localStorage.getItem('sw_users');
+                            if (!savedRecords) savedRecords = localStorage.getItem('sw_records');
+                            if (!savedMonthly) savedMonthly = localStorage.getItem('sw_monthly_evaluations');
                         }
-                        if (savedRecords) {
-                            const parsed = JSON.parse(savedRecords);
-                            if (parsed.length > 0) {
-                                setRecords(parsed);
-                                localStorage.setItem(lsKey('records'), JSON.stringify(parsed));
-                            }
-                        }
-                        if (savedMonthly) {
-                            const parsed = JSON.parse(savedMonthly);
-                            if (parsed.length > 0) {
-                                setSavedMonthlyEvals(parsed);
-                                localStorage.setItem(lsKey('monthly_evaluations'), JSON.stringify(parsed));
-                            }
-                        }
+
+                        const parsedUsers = savedUsers ? JSON.parse(savedUsers) : [];
+                        const parsedRecords = savedRecords ? JSON.parse(savedRecords) : [];
+                        const parsedMonthly = savedMonthly ? JSON.parse(savedMonthly) : [];
+
+                        setUsers(parsedUsers);
+                        setRecords(parsedRecords);
+                        setSavedMonthlyEvals(parsedMonthly);
+
+                        // アカウント別キーに保存
+                        localStorage.setItem(lsKey('users'), JSON.stringify(parsedUsers));
+                        localStorage.setItem(lsKey('records'), JSON.stringify(parsedRecords));
+                        localStorage.setItem(lsKey('monthly_evaluations'), JSON.stringify(parsedMonthly));
+
                         setSupabaseStatus('local');
-                        console.log('✅ localStorageからデータを読み込みました');
+                        console.log(`✅ localData[${accountName}(${accountId})]: 利用者 ${parsedUsers.length}名, 記録 ${parsedRecords.length}件`);
                     } catch (e2) {
                         console.error('localStorage読み込みエラー:', e2);
                         setSupabaseStatus('error');
@@ -1652,49 +1608,7 @@ ${pages}
                 }
             };
 
-            // Supabase 書き込みヘルパー
-            const saveUserToSupabase = async (user) => {
-                try {
-                    await supabase.from('users').upsert({
-                        id: user.id,
-                        name: user.name,
-                        furigana: user.furigana || '',
-                        number: user.number || '',
-                        account_id: accountId
-                    });
-                    console.log('💾 Supabaseにユーザー保存:', user.name);
-                } catch (e) { console.warn('Supabase書き込み失敗(user):', e); }
-            };
-
-            const deleteUserFromSupabase = async (userId) => {
-                try {
-                    await supabase.from('users').delete().eq('id', userId);
-                    console.log('🗑️ Supabaseからユーザー削除:', userId);
-                } catch (e) { console.warn('Supabase削除失敗(user):', e); }
-            };
-
-            const saveRecordToSupabase = async (record) => {
-                try {
-                    await supabase.from('records').upsert({
-                        id: record.id,
-                        user_id: record.userId,
-                        implementation_date: record.implementationDate,
-                        previous_date: record.previousDate,
-                        period_start: record.periodStart,
-                        period_end: record.periodEnd,
-                        selected_method: record.selectedMethod,
-                        condition: record.condition,
-                        work_content: record.workContent,
-                        goals: record.goals,
-                        recorder: record.recorder,
-                        manager: record.manager,
-                        account_id: accountId
-                    });
-                    console.log('💾 Supabaseに記録保存:', record.id);
-                } catch (e) { console.warn('Supabase書き込み失敗(record):', e); }
-            };
-
-            const deleteRecordFromSupabase = async (recordId) => {
+            ) => {
                 try {
                     await supabase.from('records').delete().eq('id', recordId);
                     console.log('🗑️ Supabaseから記録削除:', recordId);

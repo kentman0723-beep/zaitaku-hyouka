@@ -1093,47 +1093,85 @@ const MainApp = ({
           const firstSheetName = workbook.SheetNames[0];
           const worksheet = workbook.Sheets[firstSheetName];
 
-          // 2次元配列として読み込み（ヘッダー行より上の無駄な行をスキップするため）
-          const rawData = window.XLSX.utils.sheet_to_json(worksheet, {
+          // フォーマット済みテキスト版と生値版の両方を取得（シリアル値と文字列の両方に対応）
+          const textData = window.XLSX.utils.sheet_to_json(worksheet, {
             header: 1,
             raw: false,
             defval: ''
           });
+          const rawData = window.XLSX.utils.sheet_to_json(worksheet, {
+            header: 1,
+            raw: true,
+            defval: ''
+          });
+
           let headerRowIdx = -1;
           let nameColIdx = -1;
+          let numberColIdx = -1;
           let statusColIdx = -1;
           let dateColIdx = -1;
-          for (let i = 0; i < Math.min(rawData.length, 20); i++) {
-            const row = rawData[i];
+
+          for (let i = 0; i < Math.min(textData.length, 25); i++) {
+            const row = textData[i];
             if (!Array.isArray(row)) continue;
-            const nIdx = row.findIndex(c => String(c).includes('利用者') || String(c).includes('氏名') || String(c).includes('名前'));
-            const sIdx = row.findIndex(c => String(c).includes('提供状況') || String(c).includes('サービス'));
-            const dIdx = row.findIndex(c => String(c).includes('日付') || String(c).includes('日'));
+            const nIdx = row.findIndex(c => {
+              const s = String(c || '').replace(/\s+/g, '');
+              return s.includes('利用者名') || s.includes('氏名') || s.includes('名前');
+            });
+            const numIdx = row.findIndex(c => {
+              const s = String(c || '').replace(/\s+/g, '');
+              return s.includes('受給者証') || s.includes('受給者番号');
+            });
+            const sIdx = row.findIndex(c => {
+              const s = String(c || '').replace(/\s+/g, '');
+              return s.includes('サービス提供状況') || s.includes('提供状況') || s.includes('サービス');
+            });
+            const dIdx = row.findIndex(c => {
+              const s = String(c || '').replace(/\s+/g, '');
+              return s === '日付' || s.includes('日付') || s === '日' || s.includes('利用日');
+            });
+
             if (nIdx !== -1 && sIdx !== -1 && dIdx !== -1) {
               headerRowIdx = i;
               nameColIdx = nIdx;
+              numberColIdx = numIdx;
               statusColIdx = sIdx;
               dateColIdx = dIdx;
               break;
             }
           }
+
           if (headerRowIdx !== -1) {
             importedExcelData = [];
             let currentName = '';
-            for (let i = headerRowIdx + 1; i < rawData.length; i++) {
-              const r = rawData[i];
-              if (!Array.isArray(r) || r.length === 0) continue;
-              let cellName = String(r[nameColIdx] || '').trim();
+            let currentNumber = '';
+            for (let i = headerRowIdx + 1; i < textData.length; i++) {
+              const tRow = textData[i] || [];
+              const rRow = rawData[i] || [];
+              if (!Array.isArray(tRow) || tRow.length === 0) continue;
+              let cellName = String(tRow[nameColIdx] || '').trim();
               if (cellName) currentName = cellName;
-              importedExcelData.push({
-                '利用者名': currentName,
-                'サービス提供状況': String(r[statusColIdx] || ''),
-                '日付': String(r[dateColIdx] || '')
-              });
+              let cellNum = numberColIdx !== -1 ? String(tRow[numberColIdx] || '').trim() : '';
+              if (cellNum) currentNumber = cellNum;
+
+              const statusVal = String(tRow[statusColIdx] || '').trim();
+              const dateTextVal = String(tRow[dateColIdx] || '').trim();
+              const dateRawVal = rRow[dateColIdx] !== undefined ? rRow[dateColIdx] : '';
+
+              if (currentName || statusVal || dateTextVal) {
+                importedExcelData.push({
+                  userName: currentName,
+                  userNumber: currentNumber,
+                  status: statusVal,
+                  dateText: dateTextVal,
+                  dateRaw: dateRawVal
+                });
+              }
             }
-            console.log('インポートされたExcelデータ (ヘッダ識別＆結合解消成功):', importedExcelData);
+            console.log(`インポートされたExcelデータ: ${importedExcelData.length}行取得成功`, importedExcelData.slice(0, 5));
           } else {
             console.warn('Excelファイルの連携ヘッダー行が見つかりませんでした');
+            alert('⚠️ 添付されたExcelファイルから「利用者名」「日付」「サービス提供状況」の列が検出できませんでした。');
           }
         } catch (e) {
           console.error('Excel読み込みエラー:', e);
@@ -1185,53 +1223,80 @@ const MainApp = ({
       let firstError = null;
       const rateLimitedModels = new Set(); // レート制限に達したモデルを追跡
       const newEvals = [];
+      // 日付パースヘルパー（シリアル値・文字列の双方に対応）
+      const parseExcelDateVal = (valRaw, valText) => {
+        let m = -1;
+        let d = -1;
+        // 1. シリアル値
+        const num = Number(valRaw);
+        if (!isNaN(num) && num > 30000 && num < 60000) {
+          // 正午12時基準(+0.5日)でUTC境界ズレを防止
+          const dt = new Date(Math.round((num - 25569 + 0.5) * 86400 * 1000));
+          m = dt.getUTCMonth() + 1;
+          d = dt.getUTCDate();
+          return { month: m, day: d };
+        }
+        // 2. 文字列
+        const str = String(valText || valRaw || '')
+          .replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0))
+          .trim();
+        const slashMatch = str.match(/(?:(?:\d{2,4})[-/／])?(\d{1,2})[-/／](\d{1,2})/);
+        if (slashMatch) {
+          m = parseInt(slashMatch[1], 10);
+          d = parseInt(slashMatch[2], 10);
+          return { month: m, day: d };
+        }
+        const jpMatch = str.match(/(?:(?:\d{2,4})\s*年\s*)?(\d{1,2})\s*月\s*(\d{1,2})\s*日/);
+        if (jpMatch) {
+          m = parseInt(jpMatch[1], 10);
+          d = parseInt(jpMatch[2], 10);
+          return { month: m, day: d };
+        }
+        return { month: m, day: d };
+      };
+
       for (const user of usersWithRecords) {
         // --- 実施日の決定ロジック ---
         let computedImplDate = `${year}-${String(month).padStart(2, '0')}-15`; // デフォルトは15日
-        if (importedExcelData) {
-          // 空白を除去して比較
-          const normalizedUserName = (user.name || '').replace(/\s+/g, '');
-          // 該当ユーザーの、施設外就労で、対象月の15日以降のデータを探す
-          const matchingRow = importedExcelData.find(row => {
-            const rowName = String(row['利用者名']).replace(/\s+/g, '');
-            if (rowName !== normalizedUserName) return false;
-            const statusStr = String(row['サービス提供状況']);
-            if (!statusStr.includes('施設外就労')) return false;
-            const dateStr = String(row['日付']).replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0)).trim();
-            let rowMonth = -1;
-            let rowDay = -1;
-            if (dateStr && !isNaN(dateStr) && Number(dateStr) > 40000) {
-              // Excelシリアル値からの変換（タイムゾーンの影響を避けるためUTCで取得）
-              const d = new Date(Math.round((Number(dateStr) - 25569) * 86400 * 1000));
-              rowMonth = d.getUTCMonth() + 1;
-              rowDay = d.getUTCDate();
-            } else {
-              // "02/17", "2026/02/17", "2026-02-17" などをカバー
-              const matchSlash = dateStr.match(/(?:(?:\d{2,4})[-/／])?(\d{1,2})[-/／](\d{1,2})/);
-              if (matchSlash) {
-                rowMonth = parseInt(matchSlash[1], 10);
-                rowDay = parseInt(matchSlash[2], 10);
-              } else {
-                // "2月17日", "2026年2月17日" などをカバー
-                const matchJP = dateStr.match(/(?:(?:\d{2,4})\s*年\s*)?(\d{1,2})\s*月\s*(\d{1,2})\s*日/);
-                if (matchJP) {
-                  rowMonth = parseInt(matchJP[1], 10);
-                  rowDay = parseInt(matchJP[2], 10);
-                }
-              }
-            }
-            if (rowMonth === month && rowDay >= 15) {
-              // マッチした行の情報を保存しておく（抽出用）
-              row._extractedDay = rowDay;
-              return true;
-            }
+        if (importedExcelData && importedExcelData.length > 0) {
+          const normUserName = (user.name || '').replace(/\s+/g, '');
+          const normUserNumber = (user.number || '').trim();
+
+          // 該当利用者の行（名前一致または受給者証番号一致）
+          const userRows = importedExcelData.filter(row => {
+            const rName = String(row.userName || '').replace(/\s+/g, '');
+            const rNum = String(row.userNumber || '').trim();
+            if (normUserNumber && rNum && normUserNumber === rNum) return true;
+            if (normUserName && rName && (normUserName === rName || rName.includes(normUserName) || normUserName.includes(rName))) return true;
             return false;
           });
-          if (matchingRow) {
-            computedImplDate = `${year}-${String(month).padStart(2, '0')}-${String(matchingRow._extractedDay).padStart(2, '0')}`;
-            console.log(`${user.name} の実施日をExcelから取得: ${computedImplDate}`);
+
+          // 15日以降で「施設外就労」の行を探す
+          const facilityRows = [];
+          for (const r of userRows) {
+            const status = String(r.status || '').replace(/\s+/g, '');
+            if (!status.includes('施設外就労') && !status.includes('施設外')) continue;
+            const parsed = parseExcelDateVal(r.dateRaw, r.dateText);
+            if (parsed.day >= 15) {
+              facilityRows.push({
+                ...r,
+                extractedMonth: parsed.month,
+                extractedDay: parsed.day
+              });
+            }
+          }
+
+          if (facilityRows.length > 0) {
+            // 優先1: 対象月(month)と月が一致し、15日以降の最初の日
+            const exactMonthRow = facilityRows.find(r => r.extractedMonth === month);
+            // 優先2: 月の表記に関わらず15日以降の最初の施設外就労日
+            const targetRow = exactMonthRow || facilityRows[0];
+            const chosenDay = targetRow.extractedDay;
+
+            computedImplDate = `${year}-${String(month).padStart(2, '0')}-${String(chosenDay).padStart(2, '0')}`;
+            console.log(`✅ [Excel自動設定] ${user.name}: 15日以降の来所日(施設外就労) -> ${computedImplDate}`);
           } else {
-            console.log(`${user.name} の「施設外就労 (15日以降)」が見つかりません。デフォルト15日を適用`);
+            console.log(`ℹ️ [Excel自動設定] ${user.name}: 15日以降の施設外就労が見つかりませんでした (デフォルト15日を適用)`);
           }
         }
         const userRecords = records.filter(r => {
@@ -1575,7 +1640,15 @@ ${baseContext}
       const rateLimitInfo = rateLimitedModels.size > 0 ? `\nレート制限モデル: ${[...rateLimitedModels].join(', ')}` : '';
       const errorInfo = aiFailCount > 0 && firstError ? '\nエラー: ' + firstError : '';
       const aiMsg = currentKey ? `\nAI生成: 成功${aiSuccessCount}件${aiFailCount > 0 ? ', 失敗' + aiFailCount + '件' : ''}\nモデル: ${workingModelName || '未検出'}${rateLimitInfo}${errorInfo}` : '\n⚠️ APIキー未設定のためAI生成はスキップされました';
-      alert(`${usersWithRecords.length}名分の${month}月達成度評価を自動作成しました。${aiMsg}\n下の一覧からExcelダウンロードできます。`);
+      
+      const dateSummary = newEvals.map(e => {
+        const u = users.find(usr => usr.id === e.userId);
+        const day = new Date(e.implementationDate).getDate();
+        return `・${u ? u.name : '利用者'}: 実施日 ${e.implementationDate} (${day}日)`;
+      }).join('\n');
+      const excelMsg = monthlyExcelFile ? `\n\n【設定された実施日 (施設外就労)】\n${dateSummary}` : '';
+
+      alert(`${usersWithRecords.length}名分の${month}月達成度評価を自動作成しました。${aiMsg}${excelMsg}\n\n下の一覧からExcelダウンロードや印刷ができます。`);
     } catch (err) {
       console.error('一括作成エラー:', err);
       const errorDetail = `エラー種類: ${err.name || 'N/A'}\nメッセージ: ${err.message || 'N/A'}\nスタック: ${(err.stack || '').split('\n').slice(0, 3).join('\n')}`;

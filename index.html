@@ -4,7 +4,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>在宅書類自動作成</title>
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>在宅書類自動作成 (v2.5.2)</title>
     <link rel="icon" type="image/svg+xml"
         href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0%25' stop-color='%23f472b6'/%3E%3Cstop offset='100%25' stop-color='%23a78bfa'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='8' fill='url(%23g)'/%3E%3Cpath d='M16 6L6 14h3v10h14V14h3L16 6z' fill='white' opacity='0.95'/%3E%3Crect x='12' y='18' width='8' height='6' rx='1' fill='%23f9a8d4'/%3E%3Cline x1='12' y1='14' x2='20' y2='14' stroke='%23c084fc' stroke-width='1.2' stroke-linecap='round'/%3E%3Cline x1='13' y1='16.5' x2='19' y2='16.5' stroke='%23c084fc' stroke-width='1' stroke-linecap='round'/%3E%3C/svg%3E" />
 
@@ -1026,11 +1029,32 @@ const MainApp = ({
   const [excelParsing, setExcelParsing] = useState(false);
   const [bulkCreating, setBulkCreating] = useState(false);
 
-  // --- 作業時間Excelの解析関数（全シート走査・高精度判定） ---
+  // --- 作業時間Excelの解析関数（全シート走査・高精度判定・値検出フォールバック搭載） ---
   const parseMonthlyWorkTimeExcel = async (file, targetYear, targetMonth, currentUsers) => {
     if (!file) return null;
-    const data = await file.arrayBuffer();
-    const workbook = window.XLSX.read(new Uint8Array(data), { type: 'array' });
+    let data;
+    try {
+      data = await file.arrayBuffer();
+    } catch (e) {
+      return { success: false, fileName: file.name, error: 'ファイルの読み込みに失敗しました' };
+    }
+
+    let workbook = null;
+    // 1. 通常読み込み（xlsx または UTF-8 CSV）
+    try {
+      workbook = window.XLSX.read(new Uint8Array(data), { type: 'array' });
+    } catch (e1) {
+      // 2. Shift-JIS (CP932) で再試行（CSVの場合など）
+      try {
+        workbook = window.XLSX.read(new Uint8Array(data), { type: 'array', codepage: 932 });
+      } catch (e2) {
+        return { success: false, fileName: file.name, error: 'Excel/CSV形式として認識できませんでした: ' + (e2.message || String(e2)) };
+      }
+    }
+
+    if (!workbook || !workbook.SheetNames || workbook.SheetNames.length === 0) {
+      return { success: false, fileName: file.name, error: 'Excelファイル内にシートが見つかりません' };
+    }
 
     let matchedSheet = null;
     let headerRowIdx = -1;
@@ -1041,30 +1065,31 @@ const MainApp = ({
     let textData = [];
     let rawData = [];
 
-    // 全シートを走査してヘッダー列を探索
+    // 【第1フェーズ】全シート走査してヘッダー列名を探索
     for (const sName of workbook.SheetNames) {
       const ws = workbook.Sheets[sName];
       if (!ws) continue;
       const tData = window.XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' });
       const rData = window.XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '' });
+      if (!tData || tData.length === 0) continue;
 
-      for (let i = 0; i < Math.min(tData.length, 35); i++) {
+      for (let i = 0; i < Math.min(tData.length, 50); i++) {
         const row = tData[i];
         if (!Array.isArray(row)) continue;
         const nIdx = row.findIndex(c => {
-          const s = String(c || '').replace(/[\s\u3000\u00A0]+/g, '');
-          return s.includes('利用者名') || s.includes('氏名') || s.includes('名前') || s.includes('対象者');
+          const s = String(c || '').replace(/[\s\u3000\u00A0\u200B\r\n\t]/g, '');
+          return s.includes('利用者名') || s.includes('氏名') || s.includes('名前') || s.includes('対象者') || s.includes('利用者');
         });
         const numIdx = row.findIndex(c => {
-          const s = String(c || '').replace(/[\s\u3000\u00A0]+/g, '');
-          return s.includes('受給者証') || s.includes('受給者番号') || s.includes('受給者') || s.includes('証番号');
+          const s = String(c || '').replace(/[\s\u3000\u00A0\u200B\r\n\t]/g, '');
+          return s.includes('受給者証') || s.includes('受給者番号') || s.includes('受給者') || s.includes('証番号') || s.includes('番号');
         });
         const sIdx = row.findIndex(c => {
-          const s = String(c || '').replace(/[\s\u3000\u00A0]+/g, '');
-          return s.includes('サービス提供状況') || s.includes('提供状況') || s.includes('サービス') || s.includes('就労状況') || s.includes('区分');
+          const s = String(c || '').replace(/[\s\u3000\u00A0\u200B\r\n\t]/g, '');
+          return s.includes('サービス提供状況') || s.includes('提供状況') || s.includes('サービス') || s.includes('就労状況') || s.includes('区分') || s.includes('状況');
         });
         const dIdx = row.findIndex(c => {
-          const s = String(c || '').replace(/[\s\u3000\u00A0]+/g, '');
+          const s = String(c || '').replace(/[\s\u3000\u00A0\u200B\r\n\t]/g, '');
           return s === '日付' || s.includes('日付') || s === '日' || s.includes('利用日') || s.includes('作業日') || s.includes('年月日');
         });
 
@@ -1077,17 +1102,103 @@ const MainApp = ({
           dateColIdx = dIdx;
           textData = tData;
           rawData = rData;
+          console.log(`✅ [ヘッダー検出] シート「${sName}」の${i+1}行目でヘッダー発見: 氏名(列${nIdx}), 日付(列${dIdx}), 状況(列${sIdx})`);
           break;
         }
       }
       if (matchedSheet) break;
     }
 
+    // 【第2フェーズ（強力フォールバック）】ヘッダー名で見つからない場合、セルのデータ値から列を自動判定
     if (!matchedSheet) {
+      console.log('ℹ️ ヘッダー行が見つからないため、セル値のパターン自動判定（フォールバック）を開始します...');
+      for (const sName of workbook.SheetNames) {
+        const ws = workbook.Sheets[sName];
+        if (!ws) continue;
+        const tData = window.XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' });
+        const rData = window.XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '' });
+        if (!tData || tData.length < 2) continue;
+
+        let maxCols = 0;
+        for (let i = 0; i < Math.min(tData.length, 30); i++) {
+          if (Array.isArray(tData[i])) maxCols = Math.max(maxCols, tData[i].length);
+        }
+
+        const colScores = [];
+        for (let c = 0; c < maxCols; c++) {
+          let nameScore = 0;
+          let statusScore = 0;
+          let dateScore = 0;
+          let numberScore = 0;
+
+          for (let r = 0; r < Math.min(tData.length, 60); r++) {
+            const rawVal = rData[r] ? rData[r][c] : '';
+            const textVal = String((tData[r] && tData[r][c]) || '').trim();
+            const cleanText = textVal.replace(/[\s\u3000\u00A0\u200B\r\n\t]/g, '');
+            if (!cleanText) continue;
+
+            // 氏名スコア
+            for (const u of currentUsers) {
+              const uName = (u.name || '').replace(/[\s\u3000\u00A0]+/g, '');
+              if (uName && (cleanText === uName || cleanText.includes(uName) || uName.includes(cleanText))) {
+                nameScore += 10;
+                break;
+              }
+            }
+            if (cleanText.includes('利用者名') || cleanText.includes('氏名')) nameScore += 5;
+
+            // 状況スコア
+            if (cleanText.includes('施設外就労') || cleanText.includes('施設外') || cleanText.includes('通所') || cleanText.includes('在宅')) {
+              statusScore += 10;
+            }
+            if (cleanText.includes('サービス提供状況') || cleanText.includes('提供状況')) statusScore += 5;
+
+            // 日付スコア
+            const num = Number(rawVal);
+            if (!isNaN(num) && num > 35000 && num < 60000) dateScore += 10;
+            if (/(?:(?:\d{2,4})[-/／])?\d{1,2}[-/／]\d{1,2}/.test(cleanText) || /\d{1,2}月\d{1,2}日/.test(cleanText)) dateScore += 10;
+            if (cleanText === '日付' || cleanText.includes('日付')) dateScore += 5;
+
+            // 番号スコア
+            if (/^\d{8,12}$/.test(cleanText)) numberScore += 10;
+          }
+          colScores.push({ colIdx: c, nameScore, statusScore, dateScore, numberScore });
+        }
+
+        const bestName = [...colScores].sort((a, b) => b.nameScore - a.nameScore)[0];
+        const bestStatus = [...colScores].sort((a, b) => b.statusScore - a.statusScore)[0];
+        const bestDate = [...colScores].sort((a, b) => b.dateScore - a.dateScore)[0];
+        const bestNumber = [...colScores].sort((a, b) => b.numberScore - a.numberScore)[0];
+
+        if (bestName && bestName.nameScore >= 10 &&
+            bestStatus && bestStatus.statusScore >= 10 &&
+            bestDate && bestDate.dateScore >= 10) {
+          matchedSheet = sName;
+          nameColIdx = bestName.colIdx;
+          statusColIdx = bestStatus.colIdx;
+          dateColIdx = bestDate.colIdx;
+          numberColIdx = (bestNumber && bestNumber.numberScore >= 10 && bestNumber.colIdx !== nameColIdx && bestNumber.colIdx !== dateColIdx && bestNumber.colIdx !== statusColIdx) ? bestNumber.colIdx : -1;
+          headerRowIdx = 0; // 行全体からスキャン
+          textData = tData;
+          rawData = rData;
+          console.log(`💡 [値判定エンジン成功] シート「${sName}」から列を自動特定: 氏名(列${nameColIdx}), 日付(列${dateColIdx}), 状況(列${statusColIdx}), 番号(列${numberColIdx})`);
+          break;
+        }
+      }
+    }
+
+    if (!matchedSheet) {
+      // 診断用プレビュー情報
+      const sheetPreviews = workbook.SheetNames.map(s => {
+        const ws = workbook.Sheets[s];
+        const d = ws ? window.XLSX.utils.sheet_to_json(ws, { header: 1, raw: false }).slice(0, 3) : [];
+        return `【シート: ${s}】\n` + d.map(r => Array.isArray(r) ? r.join(' | ') : '').join('\n');
+      }).join('\n\n');
+
       return {
         success: false,
         fileName: file.name,
-        error: 'Excel内から「利用者名」「日付」「サービス提供状況」の各列が検出できませんでした。シート内容をご確認ください。',
+        error: `Excel内から「利用者名」「日付」「サービス提供状況」の列が検出できませんでした。\n\n【読み取ったシート一覧】: ${workbook.SheetNames.join('、')}\n\n【ファイル先頭のプレビュー】:\n${sheetPreviews.substring(0, 300)}...`,
         sheets: workbook.SheetNames
       };
     }
@@ -1101,9 +1212,9 @@ const MainApp = ({
       const rRow = rawData[i] || [];
       if (!Array.isArray(tRow) || tRow.length === 0) continue;
       let cellName = String(tRow[nameColIdx] || '').trim();
-      if (cellName) currentName = cellName;
+      if (cellName && !cellName.includes('利用者名') && !cellName.includes('氏名')) currentName = cellName;
       let cellNum = numberColIdx !== -1 ? String(tRow[numberColIdx] || '').trim() : '';
-      if (cellNum) currentNumber = cellNum;
+      if (cellNum && !cellNum.includes('受給者')) currentNumber = cellNum;
 
       const statusVal = String(tRow[statusColIdx] || '').trim();
       const dateTextVal = String(tRow[dateColIdx] || '').trim();
@@ -1160,7 +1271,7 @@ const MainApp = ({
 
       const normUserName = String(user.name || '').replace(/[\s\u3000\u00A0]+/g, '');
       const normRName = String(rName || '').replace(/[\s\u3000\u00A0]+/g, '');
-      if (normUserName && normRName && (normUserName === normRName || normRName.includes(normUserName) || normUserName.includes(normRName))) return true;
+      if (normUserName && normRName && (normUserName === normRName || normRName.includes(normUserName) || normUserName.includes(rName))) return true;
 
       return false;
     };
@@ -6221,7 +6332,7 @@ ${baseContext}
     className: "glass p-6 rounded-xl border-l-4 border-amber-400"
   }, /*#__PURE__*/React.createElement("h3", {
     className: "font-bold text-amber-700 mb-3 flex items-center gap-2"
-  }, "📅 達成度評価の一括自動作成（毎月15日）"), /*#__PURE__*/React.createElement("p", {
+  }, React.createElement(React.Fragment, null, "📅 達成度評価の一括自動作成（毎月15日）", React.createElement("span", { className: "text-xs px-2 py-0.5 bg-green-100 text-green-800 rounded font-normal ml-2" }, "v2.5.2 最新版"))), /*#__PURE__*/React.createElement("p", {
     className: "text-sm text-gray-500 mb-4"
   }, "選択中の対象年月（", monthlyFormData.targetYear, "年", monthlyFormData.targetMonth, "月）について、 週評価データが存在する全利用者の達成度評価を一括で自動作成します。", /*#__PURE__*/React.createElement("br", null), "※作業時間Excelファイルを添付すると、各利用者の「15日以降の施設外就労（来所）日」を自動検出して実施日に設定します（添付なしの場合は15日）。"), /*#__PURE__*/React.createElement("div", {
     className: "mb-4"

@@ -799,6 +799,66 @@ const LoginPage = ({
   }, "© 2026 在宅書類自動作成")));
 };
 
+// --- 記録者・確認者リスト編集 ---
+const DEFAULT_RECORDERS = ['三宮健人', '久保田菜生', '廣瀬心咲', '西原昌憲', '髙野莉名', '広門雅史', '船橋琴未'];
+const DEFAULT_MANAGERS = ['近藤恵子'];
+const StaffListEditor = ({
+  title,
+  list,
+  onChange
+}) => {
+  const [newName, setNewName] = useState('');
+  const add = () => {
+    const name = newName.trim();
+    if (!name) return;
+    if (list.includes(name)) {
+      alert('既に登録されています');
+      return;
+    }
+    onChange([...list, name]);
+    setNewName('');
+  };
+  const remove = name => {
+    if (!confirm(`「${name}」を${title}から削除しますか？`)) return;
+    onChange(list.filter(n => n !== name));
+  };
+  return /*#__PURE__*/React.createElement("div", {
+    className: "flex-1 min-w-[200px]"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "text-sm font-bold text-gray-600 mb-2"
+  }, title, " (", list.length, "名)"), /*#__PURE__*/React.createElement("div", {
+    className: "flex flex-wrap gap-2 mb-2"
+  }, list.length === 0 && /*#__PURE__*/React.createElement("span", {
+    className: "text-xs text-gray-400"
+  }, "未登録"), list.map(name => /*#__PURE__*/React.createElement("span", {
+    key: name,
+    className: "inline-flex items-center gap-1 bg-gray-100 border border-gray-200 rounded-full px-3 py-1 text-sm text-gray-700"
+  }, name, /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: () => remove(name),
+    className: "text-gray-400 hover:text-red-500 font-bold leading-none",
+    title: "削除"
+  }, "\xD7")))), /*#__PURE__*/React.createElement("div", {
+    className: "flex gap-2"
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "text",
+    className: "input-field text-sm bg-white",
+    value: newName,
+    onChange: e => setNewName(e.target.value),
+    onKeyDown: e => {
+      if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+        e.preventDefault();
+        add();
+      }
+    },
+    placeholder: "氏名を入力"
+  }), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: add,
+    className: "btn btn-primary px-4 text-sm whitespace-nowrap"
+  }, "追加")));
+};
+
 // --- メインコンポーネント ---
 const App = () => {
   const [authUser, setAuthUser] = useState(null);
@@ -937,6 +997,25 @@ const MainApp = ({
     recorder: '',
     manager: '近藤恵子'
   });
+
+  // 記録者・確認者リスト（アカウント別に localStorage 保存）
+  const loadStaffList = (key, defaults) => {
+    try {
+      const saved = localStorage.getItem(lsKey(key));
+      return saved ? JSON.parse(saved) : defaults;
+    } catch (e) {
+      return defaults;
+    }
+  };
+  const [recorderList, setRecorderList] = useState(() => loadStaffList('recorder_list', DEFAULT_RECORDERS));
+  const [managerList, setManagerList] = useState(() => loadStaffList('manager_list', DEFAULT_MANAGERS));
+  const [showStaffEditor, setShowStaffEditor] = useState(false);
+  useEffect(() => {
+    localStorage.setItem(lsKey('recorder_list'), JSON.stringify(recorderList));
+  }, [recorderList, accountId]);
+  useEffect(() => {
+    localStorage.setItem(lsKey('manager_list'), JSON.stringify(managerList));
+  }, [managerList, accountId]);
 
   // 生成中のステータス管理
   const [loadingState, setLoadingState] = useState({
@@ -5192,7 +5271,9 @@ ${baseContext}
     }),
     placeholder: "キーワード（例：継続する、スピードアップ）を入力してAIボタンを押すと文章になります"
   }))), /*#__PURE__*/React.createElement("div", {
-    className: "glass p-5 rounded-xl flex items-end gap-4"
+    className: "glass p-5 rounded-xl"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex items-end gap-4"
   }, /*#__PURE__*/React.createElement("div", {
     className: "flex-1"
   }, /*#__PURE__*/React.createElement("label", {
@@ -5208,33 +5289,49 @@ ${baseContext}
     })
   }, /*#__PURE__*/React.createElement("option", {
     value: ""
-  }, "選択してください"), /*#__PURE__*/React.createElement("option", {
-    value: "三宮健人"
-  }, "三宮健人"), /*#__PURE__*/React.createElement("option", {
-    value: "久保田菜生"
-  }, "久保田菜生"), /*#__PURE__*/React.createElement("option", {
-    value: "廣瀬心咲"
-  }, "廣瀬心咲"), /*#__PURE__*/React.createElement("option", {
-    value: "西原昌憲"
-  }, "西原昌憲"), /*#__PURE__*/React.createElement("option", {
-    value: "髙野莉名"
-  }, "髙野莉名"), /*#__PURE__*/React.createElement("option", {
-    value: "広門雅史"
-  }, "広門雅史"), /*#__PURE__*/React.createElement("option", {
-    value: "船橋琴未"
-  }, "船橋琴未"))), /*#__PURE__*/React.createElement("div", {
+  }, "選択してください"), formData.recorder && !recorderList.includes(formData.recorder) && /*#__PURE__*/React.createElement("option", {
+    value: formData.recorder
+  }, formData.recorder), recorderList.map(name => /*#__PURE__*/React.createElement("option", {
+    key: name,
+    value: name
+  }, name)))), /*#__PURE__*/React.createElement("div", {
     className: "flex-1"
   }, /*#__PURE__*/React.createElement("label", {
     className: "block text-sm font-bold text-gray-600 mb-1"
-  }, "確認者"), /*#__PURE__*/React.createElement("input", {
-    type: "text",
-    className: "input-field bg-gray-100 text-gray-500",
+  }, "確認者"), /*#__PURE__*/React.createElement("select", {
+    className: "input-field bg-white",
     value: formData.manager,
-    readOnly: true
-  })), /*#__PURE__*/React.createElement("button", {
+    onChange: e => setFormData({
+      ...formData,
+      manager: e.target.value
+    })
+  }, /*#__PURE__*/React.createElement("option", {
+    value: ""
+  }, "選択してください"), formData.manager && !managerList.includes(formData.manager) && /*#__PURE__*/React.createElement("option", {
+    value: formData.manager
+  }, formData.manager), managerList.map(name => /*#__PURE__*/React.createElement("option", {
+    key: name,
+    value: name
+  }, name)))), /*#__PURE__*/React.createElement("button", {
     onClick: saveRecord,
     className: "btn btn-primary h-11 px-8 shadow-lg transform hover:-translate-y-1"
-  }, "記録を保存"))))), view === 'users' && /*#__PURE__*/React.createElement("div", {
+  }, "記録を保存")), /*#__PURE__*/React.createElement("div", {
+    className: "mt-3 text-right"
+  }, /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: () => setShowStaffEditor(!showStaffEditor),
+    className: "text-xs text-gray-500 hover:text-green-600 underline"
+  }, showStaffEditor ? "▲ 記録者・確認者の編集を閉じる" : "⚙ 記録者・確認者を追加・削除")), showStaffEditor && /*#__PURE__*/React.createElement("div", {
+    className: "mt-3 pt-4 border-t border-gray-200 flex flex-wrap gap-6"
+  }, /*#__PURE__*/React.createElement(StaffListEditor, {
+    title: "記録者",
+    list: recorderList,
+    onChange: setRecorderList
+  }), /*#__PURE__*/React.createElement(StaffListEditor, {
+    title: "確認者",
+    list: managerList,
+    onChange: setManagerList
+  })))))), view === 'users' && /*#__PURE__*/React.createElement("div", {
     className: "max-w-3xl mx-auto space-y-6"
   }, /*#__PURE__*/React.createElement("h2", {
     className: "text-2xl font-bold text-gray-800 flex items-center gap-2"
@@ -5545,8 +5642,14 @@ ${baseContext}
       ...prev,
       recorder: e.target.value
     })),
-    placeholder: "記録者名"
-  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+    placeholder: "記録者名",
+    list: "iw-recorder-list"
+  }), /*#__PURE__*/React.createElement("datalist", {
+    id: "iw-recorder-list"
+  }, recorderList.map(name => /*#__PURE__*/React.createElement("option", {
+    key: name,
+    value: name
+  })))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
     className: "block text-sm font-bold text-gray-600 mb-1"
   }, "確認者（管理責任者）"), /*#__PURE__*/React.createElement("input", {
     type: "text",
@@ -5555,8 +5658,14 @@ ${baseContext}
     onChange: e => setIndividualWeeklyData(prev => ({
       ...prev,
       manager: e.target.value
-    }))
-  })))), /*#__PURE__*/React.createElement("div", {
+    })),
+    list: "iw-manager-list"
+  }), /*#__PURE__*/React.createElement("datalist", {
+    id: "iw-manager-list"
+  }, managerList.map(name => /*#__PURE__*/React.createElement("option", {
+    key: name,
+    value: name
+  })))))), /*#__PURE__*/React.createElement("div", {
     className: "sticky bottom-0 bg-white border-t px-6 py-4 rounded-b-2xl flex justify-end gap-3"
   }, /*#__PURE__*/React.createElement("button", {
     onClick: () => setShowIndividualWeeklyModal(false),

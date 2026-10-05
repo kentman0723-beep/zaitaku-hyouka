@@ -551,7 +551,7 @@ const LoginPage = ({
     const acc = {
       id: 'ogura',
       display_name: '小倉',
-      email: 'ogura@rashikulab.com',
+      email: 'rashikulab.kokura@gmail.com',
       auth_uid: 'ogura'
     };
     loginAsAccount(acc);
@@ -565,7 +565,7 @@ const LoginPage = ({
     if (lowerEmail.includes('kajimachi') || lowerEmail.includes('鍛冶町')) {
       handleOguraKajimachiLogin();
       return;
-    } else if (lowerEmail.includes('ogura') || lowerEmail.includes('小倉')) {
+    } else if (lowerEmail.includes('kokura') || lowerEmail.includes('ogura') || lowerEmail.includes('小倉')) {
       handleOguraLogin();
       return;
     }
@@ -715,7 +715,7 @@ const LoginPage = ({
     className: "text-xs bg-indigo-100 text-indigo-700 font-bold px-2 py-0.5 rounded-full"
   }, "新規（データ空）")), /*#__PURE__*/React.createElement("p", {
     className: "text-xs text-gray-400 mt-0.5"
-  }, "ogura@rashikulab.com")), /*#__PURE__*/React.createElement("div", {
+  }, "rashikulab.kokura@gmail.com")), /*#__PURE__*/React.createElement("div", {
     className: "text-indigo-500 font-bold text-sm group-hover:translate-x-1 transition-transform"
   }, "ログイン →"))), /*#__PURE__*/React.createElement("div", {
     className: `glass p-6 rounded-2xl ${shake ? 'animate-bounce' : ''}`

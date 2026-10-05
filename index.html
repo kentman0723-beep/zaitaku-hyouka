@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ja">
 
 <head>
@@ -863,40 +863,8 @@ const StaffListEditor = ({
 // --- メインコンポーネント ---
 const App = () => {
   const [authUser, setAuthUser] = useState(null);
-  const [authLoading, setAuthLoading] = useState(true);
   const [accountInfo, setAccountInfo] = useState(null); // { id, display_name, auth_uid }
 
-  // 初期化
-  useEffect(() => {
-    const savedLocal = localStorage.getItem('sw_local_session');
-    if (savedLocal) {
-      try {
-        const parsed = JSON.parse(savedLocal);
-        setAccountInfo(parsed);
-        setAuthUser({
-          id: parsed.id,
-          email: parsed.email
-        });
-        setAuthLoading(false);
-        return;
-      } catch (e) {}
-    }
-
-    // デフォルト: 初回は「小倉鍛冶町」を自動選択
-    const defaultAcc = {
-      id: 'ogura_kajimachi',
-      display_name: '小倉鍛冶町',
-      email: 'rashikulab.kajimachi@gmail.com',
-      auth_uid: 'ogura_kajimachi'
-    };
-    localStorage.setItem('sw_local_session', JSON.stringify(defaultAcc));
-    setAccountInfo(defaultAcc);
-    setAuthUser({
-      id: defaultAcc.id,
-      email: defaultAcc.email
-    });
-    setAuthLoading(false);
-  }, []);
   const handleLogout = () => {
     localStorage.removeItem('sw_local_session');
     setAuthUser(null);
@@ -910,25 +878,8 @@ const App = () => {
       email: account.email
     });
   };
-  if (authLoading) {
-    return /*#__PURE__*/React.createElement("div", {
-      className: "min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-indigo-50 flex items-center justify-center"
-    }, /*#__PURE__*/React.createElement("div", {
-      className: "text-center"
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: 'inline-block',
-        width: '3rem',
-        height: '3rem',
-        border: '4px solid #e5e7eb',
-        borderTop: '4px solid #a78bfa',
-        borderRadius: '50%',
-        animation: 'spin 1s linear infinite'
-      }
-    }), /*#__PURE__*/React.createElement("p", {
-      className: "text-gray-500 mt-4 font-medium"
-    }, "読み込み中...")));
-  }
+
+  // トップページ: 常にアカウント選択画面を表示
   if (!authUser) {
     return /*#__PURE__*/React.createElement(LoginPage, {
       onLogin: handleLoginSuccess
@@ -5290,8 +5241,8 @@ ${baseContext}
     className: "text-xs text-gray-400 truncate"
   }, authUser?.email || ''))), /*#__PURE__*/React.createElement("button", {
     onClick: onLogout,
-    className: "w-full flex items-center gap-2 px-4 py-2 rounded-lg text-sm text-gray-500 hover:bg-red-50 hover:text-red-500 transition font-medium"
-  }, /*#__PURE__*/React.createElement(Icons.LogOut, null), " ログアウト"))), /*#__PURE__*/React.createElement("main", {
+    className: "w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm text-gray-600 hover:bg-purple-50 hover:text-purple-600 transition font-medium border border-gray-200"
+  }, "🏠 アカウント選択に戻る"))), /*#__PURE__*/React.createElement("main", {
     className: "flex-1 overflow-y-auto bg-gray-50 p-8"
   }, view === 'input' && /*#__PURE__*/React.createElement("div", {
     className: "max-w-4xl mx-auto space-y-6"

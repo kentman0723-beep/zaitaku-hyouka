@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="ja">
 
 <head>
@@ -302,6 +302,7 @@ if (!sbClient) {
     }
   };
 }
+const supabaseClient = sbClient;
 const {
   useState,
   useEffect,
@@ -1619,6 +1620,7 @@ ${baseContext}
         const filtered = prev.filter(e => !(e.targetYear === year && e.targetMonth === month && usersWithRecords.some(u => u.id === e.userId)));
         return [...filtered, ...newEvals];
       });
+      newEvals.forEach(e => saveMonthlyEvalToSupabase(e));
       const rateLimitInfo = rateLimitedModels.size > 0 ? `\nレート制限モデル: ${[...rateLimitedModels].join(', ')}` : '';
       const errorInfo = aiFailCount > 0 && firstError ? '\nエラー: ' + firstError : '';
       const aiMsg = currentKey ? `\nAI生成: 成功${aiSuccessCount}件${aiFailCount > 0 ? ', 失敗' + aiFailCount + '件' : ''}\nモデル: ${workingModelName || '未検出'}${rateLimitInfo}${errorInfo}` : '\n⚠️ APIキー未設定のためAI生成はスキップされました';
@@ -1649,6 +1651,7 @@ ${baseContext}
   // --- 保存済み月次評価を削除 ---
   const deleteMonthlyEval = evalId => {
     if (confirm('この達成度評価を削除しますか？')) {
+      deleteMonthlyEvalFromSupabase(evalId);
       setSavedMonthlyEvals(prev => prev.filter(e => e.id !== evalId));
     }
   };
@@ -1666,10 +1669,12 @@ ${baseContext}
   };
   const saveEditMonthlyEval = () => {
     if (!editMonthlyEvalData) return;
-    setSavedMonthlyEvals(prev => prev.map(e => e.id === editingMonthlyEvalId ? {
+    const updatedEval = {
       ...editMonthlyEvalData,
       updatedAt: new Date().toISOString()
-    } : e));
+    };
+    setSavedMonthlyEvals(prev => prev.map(e => e.id === editingMonthlyEvalId ? updatedEval : e));
+    saveMonthlyEvalToSupabase(updatedEval);
     setEditingMonthlyEvalId(null);
     setEditMonthlyEvalData(null);
     alert('✅ 達成度評価を更新しました。');
@@ -1947,20 +1952,35 @@ ${pages}
       // Supabaseから読み込み（account_id でフィルタ）
       let usersQuery = supabaseClient.from('users').select('*').eq('account_id', accountId);
       let recordsQuery = supabaseClient.from('records').select('*').eq('account_id', accountId);
-      const {
-        data: usersData,
-        error: usersError
-      } = await usersQuery;
-      const {
-        data: recordsData,
-        error: recordsError
-      } = await recordsQuery;
+      let monthlyQuery = supabaseClient.from('monthly_evaluations').select('*').eq('account_id', accountId);
+
+      const { data: usersData, error: usersError } = await usersQuery;
+      if (usersError) throw usersError;
+      const { data: recordsData, error: recordsError } = await recordsQuery;
+      if (recordsError) throw recordsError;
+      const { data: monthlyData, error: monthlyError } = await monthlyQuery;
+      // monthly_evaluations テーブルがまだ無い場合などは警告のみで続行
+      if (monthlyError && !monthlyError.message?.includes('does not exist') && monthlyError.code !== 'PGRST205') {
+        console.warn('monthly_evaluations 取得エラー:', monthlyError);
+      }
+
       let mappedUsers = (usersData || []).map(u => ({
         id: u.id,
         name: u.name,
         furigana: u.furigana || '',
         number: u.number || ''
       }));
+
+      // selected_method のフォールバック（methods JSON も確認）
+      const extractMethod = r => {
+        if (r.selected_method) return r.selected_method;
+        if (r.methods && typeof r.methods === 'object') {
+          const keys = Object.keys(r.methods).filter(k => r.methods[k]);
+          if (keys.length > 0) return keys[0];
+        }
+        return 'commute';
+      };
+
       let mappedRecords = (recordsData || []).map(r => ({
         id: r.id,
         userId: r.user_id,
@@ -1968,7 +1988,7 @@ ${pages}
         previousDate: r.previous_date,
         periodStart: r.period_start,
         periodEnd: r.period_end,
-        selectedMethod: r.selected_method || 'commute',
+        selectedMethod: extractMethod(r),
         condition: r.condition || '',
         workContent: r.work_content || '',
         goals: r.goals || '',
@@ -1976,48 +1996,96 @@ ${pages}
         manager: r.manager || '近藤恵子'
       }));
 
-      // 「小倉鍛冶町」アカウントのみ既存レガシーデータを引き継ぐ
+      let mappedMonthly = (monthlyData || []).map(m => ({
+        id: m.id,
+        userId: m.user_id,
+        targetYear: m.target_year,
+        targetMonth: m.target_month,
+        implementationDate: m.implementation_date || '',
+        periodStart: m.period_start || '',
+        periodEnd: m.period_end || '',
+        timeStart: m.time_start || '10:00',
+        timeEnd: m.time_end || '16:00',
+        method: m.method || 'commute',
+        methodOther: m.method_other || '',
+        trainingGoal: m.training_goal || '',
+        activities: m.activities || '',
+        achievement: m.achievement || '',
+        issues: m.issues || '',
+        improvementPlan: m.improvement_plan || '',
+        healthNotes: m.health_notes || '',
+        otherNotes: m.other_notes || '',
+        workValidity: m.work_validity || '有効',
+        evaluator: m.evaluator || '近藤恵子',
+        previousEvalDate: m.previous_eval_date || '',
+        createdAt: m.created_at || '',
+        updatedAt: m.updated_at || ''
+      }));
+
+      // 「小倉鍛冶町」アカウントのみ、Supabase上の未設定レガシーデータ（account_id IS NULL）も救出
       if (accountId === 'ogura_kajimachi') {
-        // Supabaseにaccount_id未設定のデータがある場合
-        const {
-          data: legacyUsers
-        } = await supabaseClient.from('users').select('*').is('account_id', null);
-        const {
-          data: legacyRecords
-        } = await supabaseClient.from('records').select('*').is('account_id', null);
-        if (legacyUsers && legacyUsers.length > 0) {
-          const mappedLegacy = legacyUsers.map(u => ({
-            id: u.id,
-            name: u.name,
-            furigana: u.furigana || '',
-            number: u.number || ''
-          }));
-          mappedUsers = [...mappedUsers, ...mappedLegacy.filter(lu => !mappedUsers.some(mu => mu.id === lu.id))];
-        }
-        if (legacyRecords && legacyRecords.length > 0) {
-          const mappedLegacyR = legacyRecords.map(r => ({
-            id: r.id,
-            userId: r.user_id,
-            implementationDate: r.implementation_date,
-            previousDate: r.previous_date,
-            periodStart: r.period_start,
-            periodEnd: r.period_end,
-            selectedMethod: r.selected_method || 'commute',
-            condition: r.condition || '',
-            workContent: r.work_content || '',
-            goals: r.goals || '',
-            recorder: r.recorder || '',
-            manager: r.manager || '近藤恵子'
-          }));
-          mappedRecords = [...mappedRecords, ...mappedLegacyR.filter(lr => !mappedRecords.some(mr => mr.id === lr.id))];
+        try {
+          const { data: legacyUsers } = await supabaseClient.from('users').select('*').is('account_id', null);
+          const { data: legacyRecords } = await supabaseClient.from('records').select('*').is('account_id', null);
+          if (legacyUsers && legacyUsers.length > 0) {
+            const mappedLegacy = legacyUsers.map(u => ({
+              id: u.id,
+              name: u.name,
+              furigana: u.furigana || '',
+              number: u.number || ''
+            }));
+            mappedUsers = [...mappedUsers, ...mappedLegacy.filter(lu => !mappedUsers.some(mu => mu.id === lu.id))];
+          }
+          if (legacyRecords && legacyRecords.length > 0) {
+            const mappedLegacyR = legacyRecords.map(r => ({
+              id: r.id,
+              userId: r.user_id,
+              implementationDate: r.implementation_date,
+              previousDate: r.previous_date,
+              periodStart: r.period_start,
+              periodEnd: r.period_end,
+              selectedMethod: extractMethod(r),
+              condition: r.condition || '',
+              workContent: r.work_content || '',
+              goals: r.goals || '',
+              recorder: r.recorder || '',
+              manager: r.manager || '近藤恵子'
+            }));
+            mappedRecords = [...mappedRecords, ...mappedLegacyR.filter(lr => !mappedRecords.some(mr => mr.id === lr.id))];
+          }
+        } catch (le) {
+          console.warn('レガシーデータ確認スキップ:', le);
         }
       }
+
+      // 保護策: Supabaseが0件で、localStorageに既存データがある場合はローカル優先（誤上書き防止）
+      const localUsersRaw = localStorage.getItem(lsKey('users'));
+      const localRecordsRaw = localStorage.getItem(lsKey('records'));
+      const localMonthlyRaw = localStorage.getItem(lsKey('monthly_evaluations'));
+      const parsedLocalUsers = localUsersRaw ? JSON.parse(localUsersRaw) : [];
+      const parsedLocalRecords = localRecordsRaw ? JSON.parse(localRecordsRaw) : [];
+      const parsedLocalMonthly = localMonthlyRaw ? JSON.parse(localMonthlyRaw) : [];
+
+      if (mappedUsers.length === 0 && parsedLocalUsers.length > 0) {
+        console.warn('⚠️ Supabaseの利用者が0件のため、localStorageの既存データを維持します。設定画面からアップロードしてください。');
+        mappedUsers = parsedLocalUsers;
+      }
+      if (mappedRecords.length === 0 && parsedLocalRecords.length > 0) {
+        console.warn('⚠️ Supabaseの記録が0件のため、localStorageの既存データを維持します。設定画面からアップロードしてください。');
+        mappedRecords = parsedLocalRecords;
+      }
+      if (mappedMonthly.length === 0 && parsedLocalMonthly.length > 0) {
+        mappedMonthly = parsedLocalMonthly;
+      }
+
       setUsers(mappedUsers);
       setRecords(mappedRecords);
+      setSavedMonthlyEvals(mappedMonthly);
       localStorage.setItem(lsKey('users'), JSON.stringify(mappedUsers));
       localStorage.setItem(lsKey('records'), JSON.stringify(mappedRecords));
+      localStorage.setItem(lsKey('monthly_evaluations'), JSON.stringify(mappedMonthly));
       setSupabaseStatus('connected');
-      console.log(`✅ アカウント[${accountName}(${accountId})]のデータを読み込みました（利用者: ${mappedUsers.length}名、記録: ${mappedRecords.length}件）`);
+      console.log(`✅ アカウント[${accountName}(${accountId})]のデータを読み込みました（利用者: ${mappedUsers.length}名、記録: ${mappedRecords.length}件、達成度: ${mappedMonthly.length}件）`);
     } catch (e) {
       console.warn('Supabase読み込み失敗、localStorageから復元:', e);
       // localStorageからの復元
@@ -2044,7 +2112,7 @@ ${pages}
         localStorage.setItem(lsKey('records'), JSON.stringify(parsedRecords));
         localStorage.setItem(lsKey('monthly_evaluations'), JSON.stringify(parsedMonthly));
         setSupabaseStatus('local');
-        console.log(`✅ localData[${accountName}(${accountId})]: 利用者 ${parsedUsers.length}名, 記録 ${parsedRecords.length}件`);
+        console.log(`✅ localData[${accountName}(${accountId})]: 利用者 ${parsedUsers.length}名, 記録 ${parsedRecords.length}件, 達成度 ${parsedMonthly.length}件`);
       } catch (e2) {
         console.error('localStorage読み込みエラー:', e2);
         setSupabaseStatus('error');
@@ -2055,13 +2123,14 @@ ${pages}
   // Supabase 書き込みヘルパー
   const saveUserToSupabase = async user => {
     try {
-      await supabaseClient.from('users').upsert({
+      const { error } = await supabaseClient.from('users').upsert({
         id: user.id,
         name: user.name,
         furigana: user.furigana || '',
         number: user.number || '',
         account_id: accountId
       });
+      if (error) throw error;
       console.log('💾 Supabaseにユーザー保存:', user.name);
     } catch (e) {
       console.warn('Supabase書き込み失敗(user):', e);
@@ -2069,7 +2138,8 @@ ${pages}
   };
   const deleteUserFromSupabase = async userId => {
     try {
-      await supabaseClient.from('users').delete().eq('id', userId);
+      const { error } = await supabaseClient.from('users').delete().eq('id', userId);
+      if (error) throw error;
       console.log('🗑️ Supabaseからユーザー削除:', userId);
     } catch (e) {
       console.warn('Supabase削除失敗(user):', e);
@@ -2077,14 +2147,16 @@ ${pages}
   };
   const saveRecordToSupabase = async record => {
     try {
-      await supabaseClient.from('records').upsert({
+      const methodVal = record.selectedMethod || 'commute';
+      const { error } = await supabaseClient.from('records').upsert({
         id: record.id,
         user_id: record.userId,
         implementation_date: record.implementationDate,
         previous_date: record.previousDate,
         period_start: record.periodStart,
         period_end: record.periodEnd,
-        selected_method: record.selectedMethod,
+        selected_method: methodVal,
+        methods: { [methodVal]: true },
         condition: record.condition,
         work_content: record.workContent,
         goals: record.goals,
@@ -2092,6 +2164,7 @@ ${pages}
         manager: record.manager,
         account_id: accountId
       });
+      if (error) throw error;
       console.log('💾 Supabaseに記録保存:', record.id);
     } catch (e) {
       console.warn('Supabase書き込み失敗(record):', e);
@@ -2099,10 +2172,89 @@ ${pages}
   };
   const deleteRecordFromSupabase = async recordId => {
     try {
-      await supabaseClient.from('records').delete().eq('id', recordId);
+      const { error } = await supabaseClient.from('records').delete().eq('id', recordId);
+      if (error) throw error;
       console.log('🗑️ Supabaseから記録削除:', recordId);
     } catch (e) {
       console.warn('Supabase削除失敗(record):', e);
+    }
+  };
+
+  // 達成度評価の Supabase 保存・削除
+  const saveMonthlyEvalToSupabase = async evalData => {
+    try {
+      const { error } = await supabaseClient.from('monthly_evaluations').upsert({
+        id: evalData.id,
+        account_id: accountId,
+        user_id: evalData.userId,
+        target_year: evalData.targetYear,
+        target_month: evalData.targetMonth,
+        implementation_date: evalData.implementationDate || '',
+        period_start: evalData.periodStart || '',
+        period_end: evalData.periodEnd || '',
+        time_start: evalData.timeStart || '10:00',
+        time_end: evalData.timeEnd || '16:00',
+        method: evalData.method || 'commute',
+        method_other: evalData.methodOther || '',
+        training_goal: evalData.trainingGoal || '',
+        activities: evalData.activities || '',
+        achievement: evalData.achievement || '',
+        issues: evalData.issues || '',
+        improvement_plan: evalData.improvementPlan || '',
+        health_notes: evalData.healthNotes || '',
+        other_notes: evalData.otherNotes || '',
+        work_validity: evalData.workValidity || '有効',
+        evaluator: evalData.evaluator || '近藤恵子',
+        previous_eval_date: evalData.previousEvalDate || '',
+        created_at: evalData.createdAt || new Date().toISOString(),
+        updated_at: evalData.updatedAt || new Date().toISOString()
+      });
+      if (error) throw error;
+      console.log('💾 Supabaseに達成度評価保存:', evalData.id);
+    } catch (e) {
+      console.warn('Supabase書き込み失敗(monthly_eval):', e);
+    }
+  };
+  const deleteMonthlyEvalFromSupabase = async evalId => {
+    try {
+      const { error } = await supabaseClient.from('monthly_evaluations').delete().eq('id', evalId);
+      if (error) throw error;
+      console.log('🗑️ Supabaseから達成度評価削除:', evalId);
+    } catch (e) {
+      console.warn('Supabase削除失敗(monthly_eval):', e);
+    }
+  };
+
+  // 全データ一括アップロード（現在のローカルデータを Supabase へ同期）
+  const [syncingAll, setSyncingAll] = useState(false);
+  const syncAllLocalDataToSupabase = async () => {
+    if (!confirm(`現在のアカウント [${accountName}] の全データ\n・利用者: ${users.length}名\n・週評価: ${records.length}件\n・達成度評価: ${savedMonthlyEvals.length}件\nを Supabase に同期（アップロード）しますか？`)) {
+      return;
+    }
+    setSyncingAll(true);
+    try {
+      let uCount = 0;
+      for (const u of users) {
+        await saveUserToSupabase(u);
+        uCount++;
+      }
+      let rCount = 0;
+      for (const r of records) {
+        await saveRecordToSupabase(r);
+        rCount++;
+      }
+      let mCount = 0;
+      for (const m of savedMonthlyEvals) {
+        await saveMonthlyEvalToSupabase(m);
+        mCount++;
+      }
+      setSupabaseStatus('connected');
+      alert(`✅ Supabase への同期が完了しました！\n・利用者: ${uCount}名\n・週評価: ${rCount}件\n・達成度評価: ${mCount}件`);
+    } catch (err) {
+      console.error('一括同期エラー:', err);
+      alert('⚠️ 同期中にエラーが発生しました: ' + err.message);
+    } finally {
+      setSyncingAll(false);
     }
   };
 
@@ -2146,12 +2298,25 @@ ${pages}
     loadData();
   }, []);
 
-  // localStorage バックアップ保存（空配列での上書きを防止、アカウント別キー）
+  // localStorage バックアップ保存（アカウント別キー）
+  // ※以前は「空配列での上書き防止」のため length > 0 の時だけ保存していたが、
+  //   最後の1件を削除すると保存されず、再表示時に削除したデータが復活していた。
+  //   初回マウント時（読み込み前の初期値）だけスキップし、以降は空配列も保存する。
+  const usersPersistReady = React.useRef(false);
+  const recordsPersistReady = React.useRef(false);
   useEffect(() => {
-    if (users.length > 0) localStorage.setItem(lsKey('users'), JSON.stringify(users));
+    if (!usersPersistReady.current) {
+      usersPersistReady.current = true;
+      return;
+    }
+    localStorage.setItem(lsKey('users'), JSON.stringify(users));
   }, [users]);
   useEffect(() => {
-    if (records.length > 0) localStorage.setItem(lsKey('records'), JSON.stringify(records));
+    if (!recordsPersistReady.current) {
+      recordsPersistReady.current = true;
+      return;
+    }
+    localStorage.setItem(lsKey('records'), JSON.stringify(records));
   }, [records]);
 
   // --- 週評価 一括自動作成: 対象利用者を算出 ---
@@ -2273,6 +2438,7 @@ ${text}`;
     // 保存
     setAutoCreateProgress('保存中...');
     setRecords(prev => [...newRecords, ...prev]);
+    newRecords.forEach(r => saveRecordToSupabase(r));
     setAutoCreatePopup(null);
     setAutoCreateLoading(false);
     setAutoCreateProgress('');
@@ -2573,6 +2739,7 @@ ${instruction}
       id: generateId()
     };
     setRecords([newRecord, ...records]);
+    saveRecordToSupabase(newRecord);
     alert('✅ 週評価を保存しました');
     setShowIndividualWeeklyModal(false);
     if (andPrint) {
@@ -2766,6 +2933,7 @@ ${baseContext}
     } else {
       setSavedMonthlyEvals(prev => [...prev, newEval]);
     }
+    saveMonthlyEvalToSupabase(newEval);
     alert('✅ 達成度評価を保存しました。');
     setShowIndividualMonthlyModal(false);
     if (andPrint) {
@@ -2817,6 +2985,7 @@ ${baseContext}
       id: generateId()
     };
     setRecords([newRecord, ...records]);
+    saveRecordToSupabase(newRecord);
     alert('記録を保存しました');
 
     // フォームリセット
@@ -6287,7 +6456,24 @@ ${baseContext}
     className: "text-2xl font-bold text-purple-600"
   }, supabaseStatus === 'connected' ? '接続' : supabaseStatus === 'local' ? 'ローカル' : 'エラー'), /*#__PURE__*/React.createElement("div", {
     className: "text-xs text-gray-500 mt-1"
-  }, "DB状態")))))));
+  }, "DB状態"))), /*#__PURE__*/React.createElement("div", {
+    className: "border-t pt-4 space-y-3"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "text-sm text-gray-600 flex justify-between items-center"
+  }, /*#__PURE__*/React.createElement("span", null, "現在のアカウント: ", /*#__PURE__*/React.createElement("strong", {
+    className: "text-gray-800"
+  }, accountName), " (", accountId, ")"), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: loadData,
+    className: "text-xs text-blue-600 hover:underline flex items-center gap-1"
+  }, "🔄 Supabaseから再読込")), /*#__PURE__*/React.createElement("p", {
+    className: "text-xs text-gray-500"
+  }, "このブラウザに保存されているデータ（利用者・週評価・達成度評価）を、現在のアカウント名義で Supabase クラウドデータベースに一括送信・保存します。"), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: syncAllLocalDataToSupabase,
+    disabled: syncingAll,
+    className: "btn btn-primary w-full py-3 flex items-center justify-center gap-2 shadow"
+  }, syncingAll ? "同期中..." : "☁️ ブラウザの全データを Supabase に同期（アップロード）"))))));
 };
 
 // サブコンポーネント: 利用者行（編集対応）

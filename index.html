@@ -1022,7 +1022,224 @@ const MainApp = ({
     localStorage.setItem(lsKey('monthly_evaluations'), JSON.stringify(savedMonthlyEvals));
   }, [savedMonthlyEvals]);
   const [monthlyExcelFile, setMonthlyExcelFile] = useState(null);
+  const [excelPreviewInfo, setExcelPreviewInfo] = useState(null);
+  const [excelParsing, setExcelParsing] = useState(false);
   const [bulkCreating, setBulkCreating] = useState(false);
+
+  // --- 作業時間Excelの解析関数（全シート走査・高精度判定） ---
+  const parseMonthlyWorkTimeExcel = async (file, targetYear, targetMonth, currentUsers) => {
+    if (!file) return null;
+    const data = await file.arrayBuffer();
+    const workbook = window.XLSX.read(new Uint8Array(data), { type: 'array' });
+
+    let matchedSheet = null;
+    let headerRowIdx = -1;
+    let nameColIdx = -1;
+    let numberColIdx = -1;
+    let statusColIdx = -1;
+    let dateColIdx = -1;
+    let textData = [];
+    let rawData = [];
+
+    // 全シートを走査してヘッダー列を探索
+    for (const sName of workbook.SheetNames) {
+      const ws = workbook.Sheets[sName];
+      if (!ws) continue;
+      const tData = window.XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' });
+      const rData = window.XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '' });
+
+      for (let i = 0; i < Math.min(tData.length, 35); i++) {
+        const row = tData[i];
+        if (!Array.isArray(row)) continue;
+        const nIdx = row.findIndex(c => {
+          const s = String(c || '').replace(/[\s\u3000\u00A0]+/g, '');
+          return s.includes('利用者名') || s.includes('氏名') || s.includes('名前') || s.includes('対象者');
+        });
+        const numIdx = row.findIndex(c => {
+          const s = String(c || '').replace(/[\s\u3000\u00A0]+/g, '');
+          return s.includes('受給者証') || s.includes('受給者番号') || s.includes('受給者') || s.includes('証番号');
+        });
+        const sIdx = row.findIndex(c => {
+          const s = String(c || '').replace(/[\s\u3000\u00A0]+/g, '');
+          return s.includes('サービス提供状況') || s.includes('提供状況') || s.includes('サービス') || s.includes('就労状況') || s.includes('区分');
+        });
+        const dIdx = row.findIndex(c => {
+          const s = String(c || '').replace(/[\s\u3000\u00A0]+/g, '');
+          return s === '日付' || s.includes('日付') || s === '日' || s.includes('利用日') || s.includes('作業日') || s.includes('年月日');
+        });
+
+        if (nIdx !== -1 && sIdx !== -1 && dIdx !== -1) {
+          matchedSheet = sName;
+          headerRowIdx = i;
+          nameColIdx = nIdx;
+          numberColIdx = numIdx;
+          statusColIdx = sIdx;
+          dateColIdx = dIdx;
+          textData = tData;
+          rawData = rData;
+          break;
+        }
+      }
+      if (matchedSheet) break;
+    }
+
+    if (!matchedSheet) {
+      return {
+        success: false,
+        fileName: file.name,
+        error: 'Excel内から「利用者名」「日付」「サービス提供状況」の各列が検出できませんでした。シート内容をご確認ください。',
+        sheets: workbook.SheetNames
+      };
+    }
+
+    // 行データの抽出
+    const rows = [];
+    let currentName = '';
+    let currentNumber = '';
+    for (let i = headerRowIdx + 1; i < textData.length; i++) {
+      const tRow = textData[i] || [];
+      const rRow = rawData[i] || [];
+      if (!Array.isArray(tRow) || tRow.length === 0) continue;
+      let cellName = String(tRow[nameColIdx] || '').trim();
+      if (cellName) currentName = cellName;
+      let cellNum = numberColIdx !== -1 ? String(tRow[numberColIdx] || '').trim() : '';
+      if (cellNum) currentNumber = cellNum;
+
+      const statusVal = String(tRow[statusColIdx] || '').trim();
+      const dateTextVal = String(tRow[dateColIdx] || '').trim();
+      const dateRawVal = rRow[dateColIdx] !== undefined ? rRow[dateColIdx] : '';
+
+      if (currentName || statusVal || dateTextVal) {
+        rows.push({
+          userName: currentName,
+          userNumber: currentNumber,
+          status: statusVal,
+          dateText: dateTextVal,
+          dateRaw: dateRawVal
+        });
+      }
+    }
+
+    // 日付パースヘルパー
+    const parseExcelDate = (valRaw, valText) => {
+      let m = -1, d = -1;
+      const num = Number(valRaw);
+      if (!isNaN(num) && num > 30000 && num < 60000) {
+        if (window.XLSX && window.XLSX.SSF && window.XLSX.SSF.parse_date_code) {
+          try {
+            const parsed = window.XLSX.SSF.parse_date_code(num);
+            if (parsed && parsed.d) {
+              return { month: parsed.m, day: parsed.d };
+            }
+          } catch(e) {}
+        }
+        const dt = new Date(Math.round((num - 25569) * 86400 * 1000));
+        m = dt.getUTCMonth() + 1;
+        d = dt.getUTCDate();
+        return { month: m, day: d };
+      }
+      const str = String(valText || valRaw || '')
+        .replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0))
+        .replace(/[\s\u3000\u00A0]+/g, '');
+      const slashMatch = str.match(/(?:(?:\d{2,4})[-/／])?(\d{1,2})[-/／](\d{1,2})/);
+      if (slashMatch) {
+        return { month: parseInt(slashMatch[1], 10), day: parseInt(slashMatch[2], 10) };
+      }
+      const jpMatch = str.match(/(?:(?:\d{2,4})年)?(\d{1,2})月(\d{1,2})日/);
+      if (jpMatch) {
+        return { month: parseInt(jpMatch[1], 10), day: parseInt(jpMatch[2], 10) };
+      }
+      return { month: m, day: d };
+    };
+
+    // 利用者照合ヘルパー
+    const isMatchUser = (user, rName, rNum) => {
+      const normUserNum = String(user.number || '').trim().replace(/^0+/, '');
+      const normRNum = String(rNum || '').trim().replace(/^0+/, '');
+      if (normUserNum && normRNum && normUserNum === normRNum) return true;
+
+      const normUserName = String(user.name || '').replace(/[\s\u3000\u00A0]+/g, '');
+      const normRName = String(rName || '').replace(/[\s\u3000\u00A0]+/g, '');
+      if (normUserName && normRName && (normUserName === normRName || normRName.includes(normUserName) || normUserName.includes(normRName))) return true;
+
+      return false;
+    };
+
+    const detectedList = [];
+    const unassignedList = [];
+
+    for (const user of currentUsers) {
+      const userRows = rows.filter(r => isMatchUser(user, r.userName, r.userNumber));
+      const facilityRows = [];
+      for (const r of userRows) {
+        const status = String(r.status || '').replace(/[\s\u3000\u00A0]+/g, '');
+        if (!status.includes('施設外就労') && !status.includes('施設外')) continue;
+        const parsed = parseExcelDate(r.dateRaw, r.dateText);
+        if (parsed.day >= 15) {
+          facilityRows.push({
+            ...r,
+            extractedMonth: parsed.month,
+            extractedDay: parsed.day
+          });
+        }
+      }
+
+      if (facilityRows.length > 0) {
+        const exactMonthRow = facilityRows.find(r => r.extractedMonth === targetMonth);
+        const targetRow = exactMonthRow || facilityRows[0];
+        detectedList.push({
+          userId: user.id,
+          userName: user.name,
+          userNumber: user.number,
+          chosenDay: targetRow.extractedDay,
+          originalDateText: targetRow.dateText,
+          status: targetRow.status,
+          extractedMonth: targetRow.extractedMonth
+        });
+      } else {
+        unassignedList.push({
+          userId: user.id,
+          userName: user.name,
+          userNumber: user.number
+        });
+      }
+    }
+
+    return {
+      success: true,
+      fileName: file.name,
+      sheetName: matchedSheet,
+      totalRows: rows.length,
+      detectedList,
+      unassignedList,
+      parsedRows: rows
+    };
+  };
+
+  // ファイル選択ハンドラー
+  const handleExcelFileChange = async (file, y, m) => {
+    setMonthlyExcelFile(file);
+    if (!file) {
+      setExcelPreviewInfo(null);
+      return;
+    }
+    setExcelParsing(true);
+    try {
+      const targetY = y || monthlyFormData.targetYear;
+      const targetM = m || monthlyFormData.targetMonth;
+      const result = await parseMonthlyWorkTimeExcel(file, targetY, targetM, users);
+      setExcelPreviewInfo(result);
+    } catch (err) {
+      console.error('Excel解析エラー:', err);
+      setExcelPreviewInfo({
+        success: false,
+        fileName: file.name,
+        error: 'ファイルの解析中にエラーが発生しました: ' + (err.message || String(err))
+      });
+    } finally {
+      setExcelParsing(false);
+    }
+  };
 
   // --- 達成度評価 編集用 State ---
   const [editingMonthlyEvalId, setEditingMonthlyEvalId] = useState(null);
@@ -1075,107 +1292,32 @@ const MainApp = ({
 
   // --- 全利用者の達成度評価を一括自動作成 ---
   const autoCreateAllMonthlyEvaluations = async () => {
+    const year = monthlyFormData.targetYear;
+    const month = monthlyFormData.targetMonth;
+
+    // Excelファイル未添付の場合の安全確認
+    if (!monthlyExcelFile) {
+      const confirmNoExcel = confirm(`作業時間Excelファイルが選択されていません。\n全利用者の実施日をデフォルトの【${month}月15日】で作成しますか？\n\n（Excelファイルを添付すると、各利用者の15日以降の来所日・施設外就労日が自動設定されます）`);
+      if (!confirmNoExcel) return;
+    }
+
     setBulkCreating(true);
     try {
-      const year = monthlyFormData.targetYear;
-      const month = monthlyFormData.targetMonth;
       let currentKey = apiKey || MANUAL_API_KEY || localStorage.getItem('sw_api_key') || '';
       let keySource = currentKey ? apiKey ? 'state' : MANUAL_API_KEY ? 'manual' : 'localStorage' : 'none';
 
-      // Excelデータの読み込みとパース
-      let importedExcelData = null;
+      // Excelデータの解析結果を取得（プレビュー情報がある場合は再利用、なければ解析実行）
+      let currentExcelInfo = null;
       if (monthlyExcelFile) {
-        try {
-          const data = await monthlyExcelFile.arrayBuffer();
-          const workbook = window.XLSX.read(new Uint8Array(data), {
-            type: 'array'
-          });
-          const firstSheetName = workbook.SheetNames[0];
-          const worksheet = workbook.Sheets[firstSheetName];
+        if (excelPreviewInfo && excelPreviewInfo.success && excelPreviewInfo.fileName === monthlyExcelFile.name) {
+          currentExcelInfo = excelPreviewInfo;
+        } else {
+          currentExcelInfo = await parseMonthlyWorkTimeExcel(monthlyExcelFile, year, month, users);
+          setExcelPreviewInfo(currentExcelInfo);
+        }
 
-          // フォーマット済みテキスト版と生値版の両方を取得（シリアル値と文字列の両方に対応）
-          const textData = window.XLSX.utils.sheet_to_json(worksheet, {
-            header: 1,
-            raw: false,
-            defval: ''
-          });
-          const rawData = window.XLSX.utils.sheet_to_json(worksheet, {
-            header: 1,
-            raw: true,
-            defval: ''
-          });
-
-          let headerRowIdx = -1;
-          let nameColIdx = -1;
-          let numberColIdx = -1;
-          let statusColIdx = -1;
-          let dateColIdx = -1;
-
-          for (let i = 0; i < Math.min(textData.length, 25); i++) {
-            const row = textData[i];
-            if (!Array.isArray(row)) continue;
-            const nIdx = row.findIndex(c => {
-              const s = String(c || '').replace(/\s+/g, '');
-              return s.includes('利用者名') || s.includes('氏名') || s.includes('名前');
-            });
-            const numIdx = row.findIndex(c => {
-              const s = String(c || '').replace(/\s+/g, '');
-              return s.includes('受給者証') || s.includes('受給者番号');
-            });
-            const sIdx = row.findIndex(c => {
-              const s = String(c || '').replace(/\s+/g, '');
-              return s.includes('サービス提供状況') || s.includes('提供状況') || s.includes('サービス');
-            });
-            const dIdx = row.findIndex(c => {
-              const s = String(c || '').replace(/\s+/g, '');
-              return s === '日付' || s.includes('日付') || s === '日' || s.includes('利用日');
-            });
-
-            if (nIdx !== -1 && sIdx !== -1 && dIdx !== -1) {
-              headerRowIdx = i;
-              nameColIdx = nIdx;
-              numberColIdx = numIdx;
-              statusColIdx = sIdx;
-              dateColIdx = dIdx;
-              break;
-            }
-          }
-
-          if (headerRowIdx !== -1) {
-            importedExcelData = [];
-            let currentName = '';
-            let currentNumber = '';
-            for (let i = headerRowIdx + 1; i < textData.length; i++) {
-              const tRow = textData[i] || [];
-              const rRow = rawData[i] || [];
-              if (!Array.isArray(tRow) || tRow.length === 0) continue;
-              let cellName = String(tRow[nameColIdx] || '').trim();
-              if (cellName) currentName = cellName;
-              let cellNum = numberColIdx !== -1 ? String(tRow[numberColIdx] || '').trim() : '';
-              if (cellNum) currentNumber = cellNum;
-
-              const statusVal = String(tRow[statusColIdx] || '').trim();
-              const dateTextVal = String(tRow[dateColIdx] || '').trim();
-              const dateRawVal = rRow[dateColIdx] !== undefined ? rRow[dateColIdx] : '';
-
-              if (currentName || statusVal || dateTextVal) {
-                importedExcelData.push({
-                  userName: currentName,
-                  userNumber: currentNumber,
-                  status: statusVal,
-                  dateText: dateTextVal,
-                  dateRaw: dateRawVal
-                });
-              }
-            }
-            console.log(`インポートされたExcelデータ: ${importedExcelData.length}行取得成功`, importedExcelData.slice(0, 5));
-          } else {
-            console.warn('Excelファイルの連携ヘッダー行が見つかりませんでした');
-            alert('⚠️ 添付されたExcelファイルから「利用者名」「日付」「サービス提供状況」の列が検出できませんでした。');
-          }
-        } catch (e) {
-          console.error('Excel読み込みエラー:', e);
-          alert('添付されたExcelファイルの読み込みに失敗しました。ファイルを確認してください。');
+        if (!currentExcelInfo || !currentExcelInfo.success) {
+          alert(`⚠️ Excelファイルの読み込みに失敗しました:\n${currentExcelInfo?.error || '列を検出できませんでした'}\n\n作成を中断します。ファイル内容をご確認ください。`);
           setBulkCreating(false);
           return;
         }
@@ -1206,6 +1348,7 @@ const MainApp = ({
       });
       if (usersWithRecords.length === 0) {
         alert(`${year}年${month}月の週評価データを持つ利用者がいません。`);
+        setBulkCreating(false);
         return;
       }
 
@@ -1214,6 +1357,7 @@ const MainApp = ({
       if (alreadyCreated.length > 0) {
         const names = alreadyCreated.map(u => u.name).join('、');
         if (!confirm(`以下の利用者は既に${month}月の達成度評価が作成済みです：\n${names}\n\n上書きしますか？`)) {
+          setBulkCreating(false);
           return;
         }
       }
@@ -1223,78 +1367,15 @@ const MainApp = ({
       let firstError = null;
       const rateLimitedModels = new Set(); // レート制限に達したモデルを追跡
       const newEvals = [];
-      // 日付パースヘルパー（シリアル値・文字列の双方に対応）
-      const parseExcelDateVal = (valRaw, valText) => {
-        let m = -1;
-        let d = -1;
-        // 1. シリアル値
-        const num = Number(valRaw);
-        if (!isNaN(num) && num > 30000 && num < 60000) {
-          // 正午12時基準(+0.5日)でUTC境界ズレを防止
-          const dt = new Date(Math.round((num - 25569 + 0.5) * 86400 * 1000));
-          m = dt.getUTCMonth() + 1;
-          d = dt.getUTCDate();
-          return { month: m, day: d };
-        }
-        // 2. 文字列
-        const str = String(valText || valRaw || '')
-          .replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0))
-          .trim();
-        const slashMatch = str.match(/(?:(?:\d{2,4})[-/／])?(\d{1,2})[-/／](\d{1,2})/);
-        if (slashMatch) {
-          m = parseInt(slashMatch[1], 10);
-          d = parseInt(slashMatch[2], 10);
-          return { month: m, day: d };
-        }
-        const jpMatch = str.match(/(?:(?:\d{2,4})\s*年\s*)?(\d{1,2})\s*月\s*(\d{1,2})\s*日/);
-        if (jpMatch) {
-          m = parseInt(jpMatch[1], 10);
-          d = parseInt(jpMatch[2], 10);
-          return { month: m, day: d };
-        }
-        return { month: m, day: d };
-      };
 
       for (const user of usersWithRecords) {
         // --- 実施日の決定ロジック ---
         let computedImplDate = `${year}-${String(month).padStart(2, '0')}-15`; // デフォルトは15日
-        if (importedExcelData && importedExcelData.length > 0) {
-          const normUserName = (user.name || '').replace(/\s+/g, '');
-          const normUserNumber = (user.number || '').trim();
-
-          // 該当利用者の行（名前一致または受給者証番号一致）
-          const userRows = importedExcelData.filter(row => {
-            const rName = String(row.userName || '').replace(/\s+/g, '');
-            const rNum = String(row.userNumber || '').trim();
-            if (normUserNumber && rNum && normUserNumber === rNum) return true;
-            if (normUserName && rName && (normUserName === rName || rName.includes(normUserName) || normUserName.includes(rName))) return true;
-            return false;
-          });
-
-          // 15日以降で「施設外就労」の行を探す
-          const facilityRows = [];
-          for (const r of userRows) {
-            const status = String(r.status || '').replace(/\s+/g, '');
-            if (!status.includes('施設外就労') && !status.includes('施設外')) continue;
-            const parsed = parseExcelDateVal(r.dateRaw, r.dateText);
-            if (parsed.day >= 15) {
-              facilityRows.push({
-                ...r,
-                extractedMonth: parsed.month,
-                extractedDay: parsed.day
-              });
-            }
-          }
-
-          if (facilityRows.length > 0) {
-            // 優先1: 対象月(month)と月が一致し、15日以降の最初の日
-            const exactMonthRow = facilityRows.find(r => r.extractedMonth === month);
-            // 優先2: 月の表記に関わらず15日以降の最初の施設外就労日
-            const targetRow = exactMonthRow || facilityRows[0];
-            const chosenDay = targetRow.extractedDay;
-
-            computedImplDate = `${year}-${String(month).padStart(2, '0')}-${String(chosenDay).padStart(2, '0')}`;
-            console.log(`✅ [Excel自動設定] ${user.name}: 15日以降の来所日(施設外就労) -> ${computedImplDate}`);
+        if (currentExcelInfo && currentExcelInfo.success && currentExcelInfo.detectedList) {
+          const detected = currentExcelInfo.detectedList.find(d => d.userId === user.id);
+          if (detected && detected.chosenDay >= 15) {
+            computedImplDate = `${year}-${String(month).padStart(2, '0')}-${String(detected.chosenDay).padStart(2, '0')}`;
+            console.log(`✅ [Excel自動設定] ${user.name}: 15日以降の来所日(施設外就労) -> ${computedImplDate} (元のセル: ${detected.originalDateText})`);
           } else {
             console.log(`ℹ️ [Excel自動設定] ${user.name}: 15日以降の施設外就労が見つかりませんでした (デフォルト15日を適用)`);
           }
@@ -6117,20 +6198,22 @@ ${baseContext}
       padding: '0.4rem'
     },
     value: monthlyFormData.targetYear,
-    onChange: e => setMonthlyFormData({
-      ...monthlyFormData,
-      targetYear: Number(e.target.value)
-    })
+    onChange: e => {
+      const newY = Number(e.target.value);
+      setMonthlyFormData(prev => ({ ...prev, targetYear: newY }));
+      if (monthlyExcelFile) handleExcelFileChange(monthlyExcelFile, newY, monthlyFormData.targetMonth);
+    }
   }, [2024, 2025, 2026, 2027, 2028].map(y => /*#__PURE__*/React.createElement("option", {
     key: y,
     value: y
   }, `令和${y - 2018}年 (${y})`))), /*#__PURE__*/React.createElement("select", {
     className: "input-field",
     value: monthlyFormData.targetMonth,
-    onChange: e => setMonthlyFormData({
-      ...monthlyFormData,
-      targetMonth: Number(e.target.value)
-    })
+    onChange: e => {
+      const newM = Number(e.target.value);
+      setMonthlyFormData(prev => ({ ...prev, targetMonth: newM }));
+      if (monthlyExcelFile) handleExcelFileChange(monthlyExcelFile, monthlyFormData.targetYear, newM);
+    }
   }, [...Array(12)].map((_, i) => /*#__PURE__*/React.createElement("option", {
     key: i + 1,
     value: i + 1
@@ -6140,16 +6223,49 @@ ${baseContext}
     className: "font-bold text-amber-700 mb-3 flex items-center gap-2"
   }, "📅 達成度評価の一括自動作成（毎月15日）"), /*#__PURE__*/React.createElement("p", {
     className: "text-sm text-gray-500 mb-4"
-  }, "選択中の対象年月（", monthlyFormData.targetYear, "年", monthlyFormData.targetMonth, "月）について、 週評価データが存在する全利用者の達成度評価を一括で自動作成します。", /*#__PURE__*/React.createElement("br", null), "※実績のExcelファイル（任意）を添付すると、各利用者の「施設外就労かつ15日以降」の日付を自動で「実施日」に設定します。添付がない場合はデフォルトで15日になります。"), /*#__PURE__*/React.createElement("div", {
+  }, "選択中の対象年月（", monthlyFormData.targetYear, "年", monthlyFormData.targetMonth, "月）について、 週評価データが存在する全利用者の達成度評価を一括で自動作成します。", /*#__PURE__*/React.createElement("br", null), "※作業時間Excelファイルを添付すると、各利用者の「15日以降の施設外就労（来所）日」を自動検出して実施日に設定します（添付なしの場合は15日）。"), /*#__PURE__*/React.createElement("div", {
     className: "mb-4"
   }, /*#__PURE__*/React.createElement("label", {
     className: "block text-sm font-bold text-gray-600 mb-1"
-  }, "作業時間エクセルデータ (任意)"), /*#__PURE__*/React.createElement("input", {
+  }, "作業時間エクセルデータ (任意)"), /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center gap-2"
+  }, /*#__PURE__*/React.createElement("input", {
     type: "file",
     accept: ".xlsx, .xls",
-    onChange: e => setMonthlyExcelFile(e.target.files[0] || null),
+    onChange: e => handleExcelFileChange(e.target.files[0] || null),
     className: "block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-amber-50 file:text-amber-700 hover:file:bg-amber-100"
-  })), /*#__PURE__*/React.createElement("button", {
+  }), monthlyExcelFile && /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: () => handleExcelFileChange(null),
+    className: "btn bg-gray-200 hover:bg-gray-300 text-gray-700 text-xs px-2 py-1 rounded whitespace-nowrap"
+  }, "✕ 解除")), excelParsing && /*#__PURE__*/React.createElement("div", {
+    className: "mt-2 text-xs text-amber-600 flex items-center gap-1"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "loading-dots"
+  }, "🔄 Excelファイルを解析中…")), excelPreviewInfo && excelPreviewInfo.success && /*#__PURE__*/React.createElement("div", {
+    className: "mt-3 p-3 bg-green-50 border border-green-200 rounded-lg text-xs text-green-900"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "font-bold text-green-800 flex items-center gap-1 mb-1"
+  }, "✅ Excel解析成功: ", excelPreviewInfo.fileName, " (シート: ", excelPreviewInfo.sheetName, ")"), /*#__PURE__*/React.createElement("div", {
+    className: "text-gray-600 mb-2"
+  }, "対象月（", monthlyFormData.targetMonth, "月）の15日以降に来所（施設外就労）した日を自動検出しました："), /*#__PURE__*/React.createElement("div", {
+    className: "flex flex-wrap gap-1 mb-2"
+  }, excelPreviewInfo.detectedList && excelPreviewInfo.detectedList.length > 0 ? excelPreviewInfo.detectedList.map(item => /*#__PURE__*/React.createElement("span", {
+    key: item.userId,
+    className: "inline-flex items-center gap-1 px-2 py-1 bg-white border border-green-300 rounded shadow-sm text-green-900 font-semibold"
+  }, item.userName, ": ", /*#__PURE__*/React.createElement("span", {
+    className: "text-amber-600 font-bold"
+  }, item.chosenDay, "日"), /*#__PURE__*/React.createElement("span", {
+    className: "text-gray-400 text-[10px]"
+  }, "(", item.status, ")"))) : /*#__PURE__*/React.createElement("span", {
+    className: "text-gray-500"
+  }, "（15日以降の施設外就労データがありません）")), excelPreviewInfo.unassignedList && excelPreviewInfo.unassignedList.length > 0 && /*#__PURE__*/React.createElement("div", {
+    className: "text-amber-700 text-[11px] mt-1"
+  }, "※ 15日以降の施設外就労が見つからなかった方（デフォルト15日が適用されます）：", excelPreviewInfo.unassignedList.map(u => u.userName).join('、'))), excelPreviewInfo && !excelPreviewInfo.success && /*#__PURE__*/React.createElement("div", {
+    className: "mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-800"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "font-bold mb-1"
+  }, "⚠️ Excel解析警告"), /*#__PURE__*/React.createElement("p", null, excelPreviewInfo.error))), /*#__PURE__*/React.createElement("button", {
     onClick: autoCreateAllMonthlyEvaluations,
     disabled: bulkCreating,
     className: `btn px-8 py-3 shadow-lg transform hover:-translate-y-1 transition text-base font-bold ${bulkCreating ? 'bg-gray-400 cursor-not-allowed' : 'bg-amber-500 text-white hover:bg-amber-600'}`

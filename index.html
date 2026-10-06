@@ -9,7 +9,7 @@
     <meta http-equiv="Expires" content="0">
     <title>在宅書類自動作成 (v2.5.2)</title>
     <link rel="icon" type="image/svg+xml"
-        href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0%25' stop-color='%23f472b6'/%3E%3Cstop offset='100%25' stop-color='%23a78bfa'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='8' fill='url(%23g)'/%3E%3Cpath d='M16 6L6 14h3v10h14V14h3L16 6z' fill='white' opacity='0.95'/%3E%3Crect x='12' y='18' width='8' height='6' rx='1' fill='%23f9a8d4'/%3E%3Cline x1='12' y1='14' x2='20' y2='14' stroke='%23c084fc' stroke-width='1.2' stroke-linecap='round'/%3E%3Cline x1='13' y1='16.5' x2='19' y2='16.5' stroke='%23c084fc' stroke-width='1' stroke-linecap='round'/%3E%3C/svg%3E" />
+        href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23111827'/%3E%3Cpath d='M18 8h-7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V13z' fill='none' stroke='white' stroke-width='1.6' stroke-linejoin='round'/%3E%3Cpath d='M18 8v5h5M12.5 17h7M12.5 20.5h4.5' fill='none' stroke='white' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E" />
 
     <!-- スタイル・ライブラリ読み込み -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -29,7 +29,7 @@
     <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
     <!-- Supabase -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
 
 
     <script type="importmap">
@@ -45,59 +45,94 @@
     </script>
 
     <style>
-        body {
-            font-family: 'Noto Sans JP', sans-serif;
-            background-color: #f3f4f6;
-            color: #1f2937;
+        :root {
+            --ink: #111827;
+            --ink-2: #374151;
+            --muted: #6b7280;
+            --line: #e5e7eb;
+            --line-strong: #d1d5db;
+            --bg: #f6f7f9;
         }
 
-        /* カスタムスクロールバー */
+        body {
+            font-family: 'Noto Sans JP', system-ui, -apple-system, 'Segoe UI', sans-serif;
+            background-color: var(--bg);
+            color: var(--ink);
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            letter-spacing: 0.02em;
+        }
+
+        ::selection {
+            background: #e5e7eb;
+        }
+
+        /* スクロールバー */
         ::-webkit-scrollbar {
-            width: 8px;
-            height: 8px;
+            width: 10px;
+            height: 10px;
         }
 
         ::-webkit-scrollbar-track {
-            background: #f1f1f1;
+            background: transparent;
         }
 
         ::-webkit-scrollbar-thumb {
-            background: #c1c1c1;
-            border-radius: 4px;
+            background: #d1d5db;
+            border-radius: 9999px;
+            border: 3px solid transparent;
+            background-clip: padding-box;
         }
 
         ::-webkit-scrollbar-thumb:hover {
-            background: #a8a8a8;
+            background: #9ca3af;
+            border: 3px solid transparent;
+            background-clip: padding-box;
         }
 
+        /* カード */
         .glass {
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            background: #ffffff;
+            border: 1px solid var(--line);
+            box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
         }
 
+        /* 入力 */
         .input-field {
             width: 100%;
-            padding: 0.75rem;
-            border: 1px solid #d1d5db;
+            padding: 0.625rem 0.75rem;
+            border: 1px solid var(--line-strong);
             border-radius: 0.5rem;
-            transition: all 0.2s;
-            background-color: #f9fafb;
+            background-color: #ffffff;
+            color: var(--ink);
+            font-size: 0.875rem;
+            line-height: 1.5;
+            transition: border-color 0.15s, box-shadow 0.15s;
+        }
+
+        .input-field:hover {
+            border-color: #9ca3af;
         }
 
         .input-field:focus {
             outline: none;
-            border-color: #10b981;
-            background-color: #ffffff;
-            box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+            border-color: var(--ink);
+            box-shadow: 0 0 0 3px rgba(17, 24, 39, 0.08);
         }
 
+        .input-field::placeholder {
+            color: #9ca3af;
+        }
+
+        /* ボタン */
         .btn {
             padding: 0.5rem 1rem;
             border-radius: 0.5rem;
-            font-weight: 600;
-            transition: all 0.2s;
+            border: 1px solid transparent;
+            font-size: 0.875rem;
+            font-weight: 500;
+            line-height: 1.25rem;
+            transition: background-color 0.15s, border-color 0.15s, color 0.15s;
             display: inline-flex;
             align-items: center;
             justify-content: center;
@@ -105,27 +140,42 @@
             cursor: pointer;
         }
 
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn svg {
+            width: 1rem;
+            height: 1rem;
+        }
+
         .btn-primary {
-            background-color: #10b981;
-            color: white;
+            background-color: var(--ink);
+            color: #ffffff;
         }
 
-        .btn-primary:hover {
-            background-color: #059669;
+        .btn-primary:hover:not(:disabled) {
+            background-color: #1f2937;
         }
 
-        .btn-secondary {
-            background-color: #3b82f6;
-            color: white;
+        .btn-secondary,
+        .btn-outline {
+            background-color: #ffffff;
+            color: var(--ink-2);
+            border-color: var(--line-strong);
         }
 
-        .btn-secondary:hover {
-            background-color: #2563eb;
+        .btn-secondary:hover:not(:disabled),
+        .btn-outline:hover:not(:disabled) {
+            background-color: #f9fafb;
+            border-color: #9ca3af;
+            color: var(--ink);
         }
 
         .btn-danger {
-            background-color: #ef4444;
-            color: white;
+            background-color: #dc2626;
+            color: #ffffff;
         }
 
         .btn-ghost {
@@ -133,30 +183,118 @@
             color: #4b5563;
         }
 
-        .btn-ghost:hover {
-            background-color: #e5e7eb;
+        .btn-ghost:hover:not(:disabled) {
+            background-color: #f3f4f6;
         }
 
         /* AIボタン */
         .btn-ai {
-            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-            color: white;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            background: #ffffff;
+            color: var(--ink-2);
+            border: 1px solid var(--line-strong);
             font-size: 0.75rem;
-            padding: 0.25rem 0.75rem;
+            font-weight: 500;
+            padding: 0.25rem 0.625rem;
             border-radius: 9999px;
-            box-shadow: 0 2px 4px rgba(99, 102, 241, 0.3);
+            cursor: pointer;
+            transition: background-color 0.15s, border-color 0.15s, color 0.15s;
         }
 
-        .btn-ai:hover {
-            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
-            transform: translateY(-1px);
+        .btn-ai svg {
+            width: 0.875rem;
+            height: 0.875rem;
+        }
+
+        .btn-ai:hover:not(:disabled) {
+            background: #f9fafb;
+            border-color: var(--ink);
+            color: var(--ink);
         }
 
         .btn-ai:disabled {
-            background: #cbd5e1;
+            background: #f9fafb;
+            color: #9ca3af;
             cursor: not-allowed;
-            transform: none;
-            box-shadow: none;
+        }
+
+        /* サイドバー */
+        .nav-item {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.5rem 0.75rem;
+            border-radius: 0.5rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #4b5563;
+            transition: background-color 0.15s, color 0.15s;
+        }
+
+        .nav-item svg {
+            width: 18px;
+            height: 18px;
+            color: #9ca3af;
+            transition: color 0.15s;
+        }
+
+        .nav-item:hover {
+            background-color: #f3f4f6;
+            color: var(--ink);
+        }
+
+        .nav-item-active,
+        .nav-item-active:hover {
+            background-color: #f3f4f6;
+            color: var(--ink);
+        }
+
+        .nav-item-active svg {
+            color: var(--ink);
+        }
+
+        /* 見出し */
+        .page-title {
+            font-size: 1.375rem;
+            font-weight: 600;
+            letter-spacing: 0;
+            color: var(--ink);
+        }
+
+        .section-title {
+            font-size: 0.9375rem;
+            font-weight: 600;
+            color: var(--ink);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        /* テーブル内の操作リンク */
+        .link-action {
+            font-size: 0.8125rem;
+            font-weight: 500;
+            color: #4b5563;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.375rem;
+            transition: background-color 0.15s, color 0.15s;
+        }
+
+        .link-action:hover {
+            background-color: #f3f4f6;
+            color: var(--ink);
+        }
+
+        .link-danger {
+            color: #9ca3af;
+        }
+
+        .link-danger:hover {
+            background-color: #fef2f2;
+            color: #dc2626;
         }
 
         .loading-dots:after {
@@ -194,12 +332,12 @@
         @keyframes fadeIn {
             from {
                 opacity: 0;
-                transform: scale(0.95);
+                transform: translateY(4px);
             }
 
             to {
                 opacity: 1;
-                transform: scale(1);
+                transform: translateY(0);
             }
         }
     </style>
@@ -207,12 +345,10 @@
 
 <body>
     <div id="root">
-        <div style="min-height: 100vh; display: flex; align-items: center; justify-content: center; background: linear-gradient(to bottom right, #fdf2f8, #f3e8ff, #e0e7ff); font-family: sans-serif;">
-            <div style="text-align: center; padding: 2rem; background: rgba(255,255,255,0.85); border-radius: 1rem; box-shadow: 0 10px 25px rgba(0,0,0,0.1); max-width: 400px; width: 90%;">
-                <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🏠</div>
-                <h2 style="font-size: 1.25rem; font-weight: bold; color: #374151; margin-bottom: 0.5rem;">在宅書類自動作成</h2>
-                <p style="color: #6b7280; font-size: 0.875rem; margin-bottom: 1.25rem;">アプリを準備しています...</p>
-                <div style="display: inline-block; width: 2rem; height: 2rem; border: 3px solid #e5e7eb; border-top: 3px solid #a78bfa; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+        <div style="min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #f6f7f9; font-family: 'Noto Sans JP', sans-serif;">
+            <div style="text-align: center;">
+                <div style="display: inline-block; width: 1.5rem; height: 1.5rem; border: 2px solid #e5e7eb; border-top-color: #111827; border-radius: 50%; animation: spin 0.8s linear infinite;"></div>
+                <p style="color: #6b7280; font-size: 0.8125rem; margin-top: 0.875rem; letter-spacing: 0.04em;">読み込み中</p>
                 <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
             </div>
         </div>
@@ -623,119 +759,109 @@ const LoginPage = ({
     loginAsAccount(newAcc);
     setLoading(false);
   };
-  const LogoIcon = () => /*#__PURE__*/React.createElement("svg", {
-    className: "w-16 h-16",
-    viewBox: "0 0 32 32",
-    fill: "none"
-  }, /*#__PURE__*/React.createElement("defs", null, /*#__PURE__*/React.createElement("linearGradient", {
-    id: "lg",
-    x1: "0",
-    y1: "0",
-    x2: "1",
-    y2: "1"
-  }, /*#__PURE__*/React.createElement("stop", {
-    offset: "0%",
-    stopColor: "#f472b6"
-  }), /*#__PURE__*/React.createElement("stop", {
-    offset: "100%",
-    stopColor: "#a78bfa"
-  }))), /*#__PURE__*/React.createElement("rect", {
-    width: "32",
-    height: "32",
-    rx: "8",
-    fill: "url(#lg)"
-  }), /*#__PURE__*/React.createElement("path", {
-    d: "M16 6L6 14h3v10h14V14h3L16 6z",
-    fill: "white",
-    opacity: "0.95"
-  }), /*#__PURE__*/React.createElement("rect", {
-    x: "12",
-    y: "18",
-    width: "8",
-    height: "6",
-    rx: "1",
-    fill: "#f9a8d4"
+  const LogoIcon = () => /*#__PURE__*/React.createElement("div", {
+    className: "w-12 h-12 rounded-xl bg-gray-900 flex items-center justify-center"
+  }, /*#__PURE__*/React.createElement("svg", {
+    className: "w-6 h-6",
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "white",
+    strokeWidth: "1.75",
+    strokeLinecap: "round",
+    strokeLinejoin: "round"
+  }, /*#__PURE__*/React.createElement("path", {
+    d: "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+  }), /*#__PURE__*/React.createElement("polyline", {
+    points: "14 2 14 8 20 8"
   }), /*#__PURE__*/React.createElement("line", {
-    x1: "12",
-    y1: "14",
-    x2: "20",
-    y2: "14",
-    stroke: "#c084fc",
-    strokeWidth: "1.2",
-    strokeLinecap: "round"
+    x1: "8", y1: "13", x2: "16", y2: "13"
   }), /*#__PURE__*/React.createElement("line", {
-    x1: "13",
-    y1: "16.5",
-    x2: "19",
-    y2: "16.5",
-    stroke: "#c084fc",
-    strokeWidth: "1",
-    strokeLinecap: "round"
-  }));
+    x1: "8", y1: "17", x2: "13", y2: "17"
+  })));
   return /*#__PURE__*/React.createElement("div", {
-    className: "min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-indigo-50 flex items-center justify-center p-4"
+    className: "min-h-screen bg-gray-50 flex items-center justify-center p-4"
   }, /*#__PURE__*/React.createElement("div", {
     className: "w-full max-w-md"
   }, /*#__PURE__*/React.createElement("div", {
     className: "text-center mb-8"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "flex justify-center mb-4"
+    className: "flex justify-center mb-5"
   }, /*#__PURE__*/React.createElement(LogoIcon, null)), /*#__PURE__*/React.createElement("h1", {
-    className: "text-3xl font-bold bg-gradient-to-r from-pink-500 to-purple-500 bg-clip-text text-transparent"
+    className: "text-2xl font-semibold text-gray-900"
   }, "在宅書類自動作成"), /*#__PURE__*/React.createElement("p", {
-    className: "text-gray-400 mt-2 text-sm"
-  }, "🏠 ログインするアカウントを選択してください")), /*#__PURE__*/React.createElement("div", {
-    className: "space-y-4 mb-6"
+    className: "text-gray-500 mt-2 text-sm"
+  }, "ログインするアカウントを選択してください")), /*#__PURE__*/React.createElement("div", {
+    className: "space-y-3 mb-6"
   }, /*#__PURE__*/React.createElement("div", {
     onClick: handleOguraKajimachiLogin,
-    className: "glass p-5 rounded-2xl cursor-pointer border-2 border-transparent hover:border-pink-400 hover:shadow-xl transition-all group flex items-center gap-4 bg-white"
+    className: "bg-white p-4 rounded-xl cursor-pointer border border-gray-200 hover:border-gray-900 transition-colors group flex items-center gap-4"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "w-12 h-12 rounded-xl bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center text-white text-xl font-bold shadow-md group-hover:scale-105 transition-transform"
-  }, "🏢"), /*#__PURE__*/React.createElement("div", {
+    className: "w-11 h-11 rounded-lg bg-gray-900 flex items-center justify-center text-white text-base font-semibold"
+  }, "鍛"), /*#__PURE__*/React.createElement("div", {
     className: "flex-1"
   }, /*#__PURE__*/React.createElement("div", {
     className: "flex items-center gap-2"
   }, /*#__PURE__*/React.createElement("h3", {
-    className: "text-lg font-bold text-gray-800"
+    className: "text-base font-semibold text-gray-900"
   }, "小倉鍛冶町"), /*#__PURE__*/React.createElement("span", {
-    className: "text-xs bg-pink-100 text-pink-700 font-bold px-2 py-0.5 rounded-full"
+    className: "text-[11px] text-gray-500 border border-gray-200 font-medium px-1.5 py-0.5 rounded"
   }, "既存データあり")), /*#__PURE__*/React.createElement("p", {
     className: "text-xs text-gray-400 mt-0.5"
   }, "rashikulab.kajimachi@gmail.com")), /*#__PURE__*/React.createElement("div", {
-    className: "text-pink-500 font-bold text-sm group-hover:translate-x-1 transition-transform"
-  }, "ログイン →")), /*#__PURE__*/React.createElement("div", {
+    className: "text-gray-300 group-hover:text-gray-900 transition-colors"
+  }, /*#__PURE__*/React.createElement("svg", {
+    className: "w-5 h-5",
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: "2",
+    strokeLinecap: "round",
+    strokeLinejoin: "round"
+  }, /*#__PURE__*/React.createElement("polyline", {
+    points: "9 18 15 12 9 6"
+  })))), /*#__PURE__*/React.createElement("div", {
     onClick: handleOguraLogin,
-    className: "glass p-5 rounded-2xl cursor-pointer border-2 border-transparent hover:border-indigo-400 hover:shadow-xl transition-all group flex items-center gap-4 bg-white"
+    className: "bg-white p-4 rounded-xl cursor-pointer border border-gray-200 hover:border-gray-900 transition-colors group flex items-center gap-4"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center text-white text-xl font-bold shadow-md group-hover:scale-105 transition-transform"
-  }, "🏢"), /*#__PURE__*/React.createElement("div", {
+    className: "w-11 h-11 rounded-lg bg-gray-900 flex items-center justify-center text-white text-base font-semibold"
+  }, "小"), /*#__PURE__*/React.createElement("div", {
     className: "flex-1"
   }, /*#__PURE__*/React.createElement("div", {
     className: "flex items-center gap-2"
   }, /*#__PURE__*/React.createElement("h3", {
-    className: "text-lg font-bold text-gray-800"
+    className: "text-base font-semibold text-gray-900"
   }, "小倉"), /*#__PURE__*/React.createElement("span", {
-    className: "text-xs bg-indigo-100 text-indigo-700 font-bold px-2 py-0.5 rounded-full"
+    className: "text-[11px] text-gray-500 border border-gray-200 font-medium px-1.5 py-0.5 rounded"
   }, "新規（データ空）")), /*#__PURE__*/React.createElement("p", {
     className: "text-xs text-gray-400 mt-0.5"
   }, "rashikulab.kokura@gmail.com")), /*#__PURE__*/React.createElement("div", {
-    className: "text-indigo-500 font-bold text-sm group-hover:translate-x-1 transition-transform"
-  }, "ログイン →"))), /*#__PURE__*/React.createElement("div", {
-    className: `glass p-6 rounded-2xl ${shake ? 'animate-bounce' : ''}`
+    className: "text-gray-300 group-hover:text-gray-900 transition-colors"
+  }, /*#__PURE__*/React.createElement("svg", {
+    className: "w-5 h-5",
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: "2",
+    strokeLinecap: "round",
+    strokeLinejoin: "round"
+  }, /*#__PURE__*/React.createElement("polyline", {
+    points: "9 18 15 12 9 6"
+  }))))), /*#__PURE__*/React.createElement("div", {
+    className: `glass p-6 rounded-xl ${shake ? 'animate-bounce' : ''}`
   }, /*#__PURE__*/React.createElement("div", {
-    className: "flex mb-4 bg-gray-100 rounded-xl p-1 text-xs"
+    className: "flex mb-5 bg-gray-100 rounded-lg p-1 text-xs"
   }, /*#__PURE__*/React.createElement("button", {
     onClick: () => {
       setMode('login');
       setError('');
     },
-    className: `flex-1 py-1.5 font-bold rounded-lg transition ${mode === 'login' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`
+    className: `flex-1 py-1.5 font-medium rounded-md transition ${mode === 'login' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`
   }, "メールログイン"), /*#__PURE__*/React.createElement("button", {
     onClick: () => {
       setMode('register');
       setError('');
     },
-    className: `flex-1 py-1.5 font-bold rounded-lg transition ${mode === 'register' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`
+    className: `flex-1 py-1.5 font-medium rounded-md transition ${mode === 'register' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`
   }, "新規アカウント作成")), error && /*#__PURE__*/React.createElement("div", {
     className: "bg-red-50 text-red-500 p-2.5 rounded-lg text-xs mb-3 text-center font-medium"
   }, error), mode === 'login' && /*#__PURE__*/React.createElement("form", {
@@ -743,7 +869,7 @@ const LoginPage = ({
   }, /*#__PURE__*/React.createElement("div", {
     className: "mb-3"
   }, /*#__PURE__*/React.createElement("label", {
-    className: "block text-xs font-bold text-gray-600 mb-1"
+    className: "block text-xs font-medium text-gray-700 mb-1.5"
   }, "メールアドレス / アカウント名"), /*#__PURE__*/React.createElement("input", {
     type: "text",
     className: "input-field text-sm",
@@ -754,7 +880,7 @@ const LoginPage = ({
   })), /*#__PURE__*/React.createElement("div", {
     className: "mb-4"
   }, /*#__PURE__*/React.createElement("label", {
-    className: "block text-xs font-bold text-gray-600 mb-1"
+    className: "block text-xs font-medium text-gray-700 mb-1.5"
   }, "パスワード"), /*#__PURE__*/React.createElement("input", {
     type: "password",
     className: "input-field text-sm",
@@ -764,16 +890,13 @@ const LoginPage = ({
   })), /*#__PURE__*/React.createElement("button", {
     type: "submit",
     disabled: loading,
-    className: "w-full py-2.5 text-sm font-bold rounded-xl text-white transition shadow-md",
-    style: {
-      background: 'linear-gradient(135deg, #f472b6 0%, #a78bfa 100%)'
-    }
+    className: "btn btn-primary w-full py-2.5"
   }, "ログイン")), mode === 'register' && /*#__PURE__*/React.createElement("form", {
     onSubmit: handleRegisterSubmit
   }, /*#__PURE__*/React.createElement("div", {
     className: "mb-3"
   }, /*#__PURE__*/React.createElement("label", {
-    className: "block text-xs font-bold text-gray-600 mb-1"
+    className: "block text-xs font-medium text-gray-700 mb-1.5"
   }, "アカウント名（事業所名）"), /*#__PURE__*/React.createElement("input", {
     type: "text",
     className: "input-field text-sm",
@@ -784,7 +907,7 @@ const LoginPage = ({
   })), /*#__PURE__*/React.createElement("div", {
     className: "mb-4"
   }, /*#__PURE__*/React.createElement("label", {
-    className: "block text-xs font-bold text-gray-600 mb-1"
+    className: "block text-xs font-medium text-gray-700 mb-1.5"
   }, "メールアドレス（任意）"), /*#__PURE__*/React.createElement("input", {
     type: "email",
     className: "input-field text-sm",
@@ -794,10 +917,7 @@ const LoginPage = ({
   })), /*#__PURE__*/React.createElement("button", {
     type: "submit",
     disabled: loading,
-    className: "w-full py-2.5 text-sm font-bold rounded-xl text-white transition shadow-md",
-    style: {
-      background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
-    }
+    className: "btn btn-primary w-full py-2.5"
   }, "アカウントを作成してログイン"))), /*#__PURE__*/React.createElement("p", {
     className: "text-center text-xs text-gray-400 mt-6"
   }, "© 2026 在宅書類自動作成")));
@@ -829,14 +949,14 @@ const StaffListEditor = ({
   return /*#__PURE__*/React.createElement("div", {
     className: "flex-1 min-w-[200px]"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "text-sm font-bold text-gray-600 mb-2"
+    className: "text-sm font-medium text-gray-700 mb-2"
   }, title, " (", list.length, "名)"), /*#__PURE__*/React.createElement("div", {
     className: "flex flex-wrap gap-2 mb-2"
   }, list.length === 0 && /*#__PURE__*/React.createElement("span", {
     className: "text-xs text-gray-400"
   }, "未登録"), list.map(name => /*#__PURE__*/React.createElement("span", {
     key: name,
-    className: "inline-flex items-center gap-1 bg-gray-100 border border-gray-200 rounded-full px-3 py-1 text-sm text-gray-700"
+    className: "inline-flex items-center gap-1.5 bg-white border border-gray-200 rounded-md px-2.5 py-1 text-sm text-gray-700"
   }, name, /*#__PURE__*/React.createElement("button", {
     type: "button",
     onClick: () => remove(name),
@@ -1428,7 +1548,7 @@ const MainApp = ({
         }
 
         if (!currentExcelInfo || !currentExcelInfo.success) {
-          alert(`⚠️ Excelファイルの読み込みに失敗しました:\n${currentExcelInfo?.error || '列を検出できませんでした'}\n\n作成を中断します。ファイル内容をご確認ください。`);
+          alert(`Excelファイルの読み込みに失敗しました:\n${currentExcelInfo?.error || '列を検出できませんでした'}\n\n作成を中断します。ファイル内容をご確認ください。`);
           setBulkCreating(false);
           return;
         }
@@ -1446,7 +1566,7 @@ const MainApp = ({
       }
       console.log(`APIキー状態: currentKey=${currentKey ? '有(' + currentKey.substring(0, 8) + '...)' : '無'}, source=${keySource}`);
       if (!currentKey) {
-        alert('⚠️ APIキーが設定されていません。AI自動生成ができないため、課題・改善方針等の欄は空白になります。\n\nサイドバーの「⚙ 設定」からGemini APIキーを登録してください。');
+        alert('APIキーが設定されていません。AI自動生成ができないため、課題・改善方針等の欄は空白になります。\n\nサイドバーの「設定」からGemini APIキーを登録してください。');
       }
 
       // 対象月の週評価データがある利用者を取得
@@ -1831,7 +1951,7 @@ ${baseContext}
       newEvals.forEach(e => saveMonthlyEvalToSupabase(e));
       const rateLimitInfo = rateLimitedModels.size > 0 ? `\nレート制限モデル: ${[...rateLimitedModels].join(', ')}` : '';
       const errorInfo = aiFailCount > 0 && firstError ? '\nエラー: ' + firstError : '';
-      const aiMsg = currentKey ? `\nAI生成: 成功${aiSuccessCount}件${aiFailCount > 0 ? ', 失敗' + aiFailCount + '件' : ''}\nモデル: ${workingModelName || '未検出'}${rateLimitInfo}${errorInfo}` : '\n⚠️ APIキー未設定のためAI生成はスキップされました';
+      const aiMsg = currentKey ? `\nAI生成: 成功${aiSuccessCount}件${aiFailCount > 0 ? ', 失敗' + aiFailCount + '件' : ''}\nモデル: ${workingModelName || '未検出'}${rateLimitInfo}${errorInfo}` : '\nAPIキー未設定のためAI生成はスキップされました';
       
       const dateSummary = newEvals.map(e => {
         const u = users.find(usr => usr.id === e.userId);
@@ -1893,7 +2013,7 @@ ${baseContext}
     saveMonthlyEvalToSupabase(updatedEval);
     setEditingMonthlyEvalId(null);
     setEditMonthlyEvalData(null);
-    alert('✅ 達成度評価を更新しました。');
+    alert('達成度評価を更新しました。');
   };
   const updateEditField = (field, value) => {
     setEditMonthlyEvalData(prev => ({
@@ -2465,10 +2585,10 @@ ${pages}
         mCount++;
       }
       setSupabaseStatus('connected');
-      alert(`✅ Supabase への同期が完了しました！\n・利用者: ${uCount}名\n・週評価: ${rCount}件\n・達成度評価: ${mCount}件`);
+      alert(`Supabase への同期が完了しました！\n・利用者: ${uCount}名\n・週評価: ${rCount}件\n・達成度評価: ${mCount}件`);
     } catch (err) {
       console.error('一括同期エラー:', err);
-      alert('⚠️ 同期中にエラーが発生しました: ' + err.message);
+      alert('同期中にエラーが発生しました: ' + err.message);
     } finally {
       setSyncingAll(false);
     }
@@ -2956,7 +3076,7 @@ ${instruction}
     };
     setRecords([newRecord, ...records]);
     saveRecordToSupabase(newRecord);
-    alert('✅ 週評価を保存しました');
+    alert('週評価を保存しました');
     setShowIndividualWeeklyModal(false);
     if (andPrint) {
       printWeeklyRecord(newRecord);
@@ -3100,7 +3220,7 @@ ${baseContext}
               workValidity: parseSection(fullText, '【妥当性】', []) || prev.workValidity
             }));
             generated = true;
-            alert('✅ AI生成が完了しました。内容を確認・修正してから保存してください。');
+            alert('AI生成が完了しました。内容を確認・修正してから保存してください。');
           }
         } catch (e) {
           console.warn(`AI生成エラー (model: ${modelName}):`, e.message);
@@ -3150,7 +3270,7 @@ ${baseContext}
       setSavedMonthlyEvals(prev => [...prev, newEval]);
     }
     saveMonthlyEvalToSupabase(newEval);
-    alert('✅ 達成度評価を保存しました。');
+    alert('達成度評価を保存しました。');
     setShowIndividualMonthlyModal(false);
     if (andPrint) {
       printAllMonthlyEvals([newEval]);
@@ -5293,17 +5413,17 @@ ${baseContext}
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      background: 'rgba(0,0,0,0.5)',
-      backdropFilter: 'blur(4px)'
+      background: 'rgba(17,24,39,0.4)',
+      backdropFilter: 'blur(2px)'
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
       background: 'white',
-      borderRadius: '1rem',
-      padding: '2rem',
+      borderRadius: '0.75rem',
+      padding: '1.75rem',
       maxWidth: '500px',
       width: '90%',
-      boxShadow: '0 25px 50px rgba(0,0,0,0.25)',
+      boxShadow: '0 20px 40px rgba(16,24,40,0.12)',
       animation: 'fadeIn 0.3s ease'
     }
   }, /*#__PURE__*/React.createElement("div", {
@@ -5313,14 +5433,13 @@ ${baseContext}
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
-      fontSize: '3rem',
-      marginBottom: '0.5rem'
+      display: 'none'
     }
-  }, "📋"), /*#__PURE__*/React.createElement("h3", {
+  }), /*#__PURE__*/React.createElement("h3", {
     style: {
-      fontSize: '1.25rem',
-      fontWeight: 'bold',
-      color: '#1f2937',
+      fontSize: '1.125rem',
+      fontWeight: 600,
+      color: '#111827',
       margin: '0 0 0.5rem'
     }
   }, "週評価の自動作成"), /*#__PURE__*/React.createElement("p", {
@@ -5335,6 +5454,7 @@ ${baseContext}
   })())), /*#__PURE__*/React.createElement("div", {
     style: {
       background: '#f9fafb',
+      border: '1px solid #f3f4f6',
       borderRadius: '0.5rem',
       padding: '1rem',
       marginBottom: '1.5rem',
@@ -5357,10 +5477,11 @@ ${baseContext}
   }, autoCreatePopup.targetUsers.map(u => /*#__PURE__*/React.createElement("span", {
     key: u.id,
     style: {
-      background: '#e0f2fe',
-      color: '#0369a1',
-      padding: '0.25rem 0.75rem',
-      borderRadius: '9999px',
+      background: '#ffffff',
+      color: '#374151',
+      border: '1px solid #e5e7eb',
+      padding: '0.25rem 0.625rem',
+      borderRadius: '0.375rem',
       fontSize: '0.85rem',
       fontWeight: 500
     }
@@ -5382,7 +5503,7 @@ ${baseContext}
       width: '2rem',
       height: '2rem',
       border: '3px solid #e5e7eb',
-      borderTop: '3px solid #10b981',
+      borderTop: '3px solid #111827',
       borderRadius: '50%',
       animation: 'spin 1s linear infinite'
     }
@@ -5403,15 +5524,15 @@ ${baseContext}
       flex: 1,
       padding: '0.75rem',
       borderRadius: '0.5rem',
-      border: '2px solid #e5e7eb',
+      border: '1px solid #d1d5db',
       background: 'white',
-      color: '#6b7280',
-      fontWeight: 600,
+      color: '#374151',
+      fontWeight: 500,
       cursor: 'pointer',
       fontSize: '0.95rem',
       transition: 'all 0.2s'
     },
-    onMouseOver: e => e.target.style.background = '#f3f4f6',
+    onMouseOver: e => e.target.style.background = '#f9fafb',
     onMouseOut: e => e.target.style.background = 'white'
   }, "スキップ"), /*#__PURE__*/React.createElement("button", {
     onClick: autoCreateWeeklyRecords,
@@ -5420,115 +5541,95 @@ ${baseContext}
       padding: '0.75rem',
       borderRadius: '0.5rem',
       border: 'none',
-      background: 'linear-gradient(135deg, #10b981, #059669)',
+      background: '#111827',
       color: 'white',
-      fontWeight: 600,
+      fontWeight: 500,
       cursor: 'pointer',
       fontSize: '0.95rem',
-      boxShadow: '0 4px 12px rgba(16,185,129,0.3)',
       transition: 'all 0.2s'
     },
     onMouseOver: e => {
-      e.target.style.transform = 'translateY(-1px)';
-      e.target.style.boxShadow = '0 6px 16px rgba(16,185,129,0.4)';
+      e.target.style.background = '#1f2937';
     },
     onMouseOut: e => {
-      e.target.style.transform = 'none';
-      e.target.style.boxShadow = '0 4px 12px rgba(16,185,129,0.3)';
+      e.target.style.background = '#111827';
     }
   }, "自動作成する")))), /*#__PURE__*/React.createElement("div", {
-    className: "w-64 bg-white border-r flex flex-col shadow-lg z-10"
+    className: "w-60 bg-white border-r border-gray-200 flex flex-col z-10"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "p-6 border-b flex items-center gap-3"
+    className: "h-16 px-5 border-b border-gray-100 flex items-center gap-3"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "w-9 h-9 rounded-xl bg-gradient-to-br from-pink-400 to-purple-500 flex items-center justify-center shadow-lg shadow-pink-200"
+    className: "w-8 h-8 rounded-lg bg-gray-900 flex items-center justify-center flex-shrink-0"
   }, /*#__PURE__*/React.createElement("svg", {
-    className: "w-5 h-5",
+    className: "w-4 h-4",
     viewBox: "0 0 24 24",
-    fill: "none"
+    fill: "none",
+    stroke: "white",
+    strokeWidth: "2",
+    strokeLinecap: "round",
+    strokeLinejoin: "round"
   }, /*#__PURE__*/React.createElement("path", {
-    d: "M12 4L4 10h2v8h12v-8h2L12 4z",
-    fill: "white",
-    opacity: "0.95"
-  }), /*#__PURE__*/React.createElement("rect", {
-    x: "9",
-    y: "14",
-    width: "6",
-    height: "4",
-    rx: "0.5",
-    fill: "#f9a8d4"
+    d: "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+  }), /*#__PURE__*/React.createElement("polyline", {
+    points: "14 2 14 8 20 8"
   }), /*#__PURE__*/React.createElement("line", {
-    x1: "9",
-    y1: "11",
-    x2: "15",
-    y2: "11",
-    stroke: "#c084fc",
-    strokeWidth: "1",
-    strokeLinecap: "round"
+    x1: "8", y1: "13", x2: "16", y2: "13"
   }), /*#__PURE__*/React.createElement("line", {
-    x1: "10",
-    y1: "13",
-    x2: "14",
-    y2: "13",
-    stroke: "#c084fc",
-    strokeWidth: "0.8",
-    strokeLinecap: "round"
+    x1: "8", y1: "17", x2: "13", y2: "17"
   }))), /*#__PURE__*/React.createElement("h1", {
-    className: "font-bold text-base tracking-tight bg-gradient-to-r from-pink-500 to-purple-500 bg-clip-text text-transparent"
+    className: "font-semibold text-[15px] text-gray-900"
   }, "在宅書類自動作成")), /*#__PURE__*/React.createElement("nav", {
-    className: "flex-1 p-4 space-y-2"
+    className: "flex-1 p-3 space-y-0.5"
   }, /*#__PURE__*/React.createElement("button", {
     onClick: () => setView('input'),
-    className: `w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition ${view === 'input' ? 'bg-green-50 text-green-700' : 'text-gray-600 hover:bg-gray-50'}`
+    className: `nav-item ${view === 'input' ? 'nav-item-active' : ''}`
   }, /*#__PURE__*/React.createElement(Icons.FilePlus, null), " 週評価入力"), /*#__PURE__*/React.createElement("button", {
     onClick: () => setView('monthly'),
-    className: `w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition ${view === 'monthly' ? 'bg-amber-50 text-amber-700' : 'text-gray-600 hover:bg-gray-50'}`
+    className: `nav-item ${view === 'monthly' ? 'nav-item-active' : ''}`
   }, /*#__PURE__*/React.createElement(Icons.Calendar, null), " 月1達成度評価"), /*#__PURE__*/React.createElement("button", {
     onClick: () => setView('users'),
-    className: `w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition ${view === 'users' ? 'bg-green-50 text-green-700' : 'text-gray-600 hover:bg-gray-50'}`
+    className: `nav-item ${view === 'users' ? 'nav-item-active' : ''}`
   }, /*#__PURE__*/React.createElement(Icons.Users, null), " 利用者管理"), /*#__PURE__*/React.createElement("button", {
     onClick: () => setView('history'),
-    className: `w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition ${view === 'history' ? 'bg-green-50 text-green-700' : 'text-gray-600 hover:bg-gray-50'}`
+    className: `nav-item ${view === 'history' ? 'nav-item-active' : ''}`
   }, /*#__PURE__*/React.createElement(Icons.Table, null), " 記録一覧・出力"), /*#__PURE__*/React.createElement("button", {
     onClick: () => setView('settings'),
-    className: `w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition ${view === 'settings' ? 'bg-gray-200 text-gray-800' : 'text-gray-600 hover:bg-gray-50'}`
+    className: `nav-item ${view === 'settings' ? 'nav-item-active' : ''}`
   }, /*#__PURE__*/React.createElement(Icons.Settings, null), " 設定")), /*#__PURE__*/React.createElement("div", {
-    className: "p-4 border-t space-y-3"
+    className: "p-3 border-t border-gray-100 space-y-2"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-pink-50 to-purple-50 rounded-lg"
+    className: "flex items-center gap-2.5 px-2 py-2"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "w-8 h-8 rounded-full bg-gradient-to-br from-pink-400 to-purple-500 flex items-center justify-center text-white text-xs font-bold shadow"
+    className: "w-8 h-8 rounded-md bg-gray-100 border border-gray-200 flex items-center justify-center text-gray-700 text-xs font-semibold flex-shrink-0"
   }, accountName ? accountName.charAt(0) : /*#__PURE__*/React.createElement(Icons.User, null)), /*#__PURE__*/React.createElement("div", {
     className: "flex-1 min-w-0"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "text-sm font-bold text-gray-700 truncate"
+    className: "text-sm font-medium text-gray-900 truncate"
   }, accountName || 'ログイン中'), /*#__PURE__*/React.createElement("div", {
     className: "text-xs text-gray-400 truncate"
   }, authUser?.email || ''))), /*#__PURE__*/React.createElement("button", {
     onClick: onLogout,
-    className: "w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm text-gray-600 hover:bg-purple-50 hover:text-purple-600 transition font-medium border border-gray-200"
-  }, "🏠 アカウント選択に戻る"))), /*#__PURE__*/React.createElement("main", {
-    className: "flex-1 overflow-y-auto bg-gray-50 p-8"
+    className: "nav-item"
+  }, /*#__PURE__*/React.createElement(Icons.LogOut, null), "アカウント選択に戻る"))), /*#__PURE__*/React.createElement("main", {
+    className: "flex-1 overflow-y-auto bg-gray-50 px-10 py-10"
   }, view === 'input' && /*#__PURE__*/React.createElement("div", {
     className: "max-w-4xl mx-auto space-y-6"
   }, /*#__PURE__*/React.createElement("h2", {
-    className: "text-2xl font-bold text-gray-800 flex items-center gap-2"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "bg-green-500 w-2 h-8 rounded-full inline-block"
-  }), "週評価の作成"), /*#__PURE__*/React.createElement("div", {
+    className: "page-title"
+  }, "週評価の作成"), /*#__PURE__*/React.createElement("div", {
     className: "grid grid-cols-1 md:grid-cols-12 gap-6"
   }, /*#__PURE__*/React.createElement("div", {
     className: "md:col-span-4 space-y-4"
   }, /*#__PURE__*/React.createElement("div", {
     className: "glass p-5 rounded-xl"
   }, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-bold text-gray-600 mb-1"
+    className: "block text-sm font-medium text-gray-700 mb-1"
   }, "利用者 ", /*#__PURE__*/React.createElement("span", {
     className: "text-red-500"
   }, "*")), /*#__PURE__*/React.createElement("select", {
     value: formData.userId,
     onChange: e => handleUserChange(e.target.value),
-    className: "input-field font-bold text-lg"
+    className: "input-field font-medium"
   }, /*#__PURE__*/React.createElement("option", {
     value: ""
   }, "選択してください"), sortedUsers.map(u => /*#__PURE__*/React.createElement("option", {
@@ -5537,14 +5638,14 @@ ${baseContext}
   }, u.name)))), /*#__PURE__*/React.createElement("div", {
     className: "glass p-5 rounded-xl space-y-4"
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-bold text-gray-600 mb-1"
+    className: "block text-sm font-medium text-gray-700 mb-1"
   }, "実施日"), /*#__PURE__*/React.createElement("input", {
     type: "date",
     value: formData.implementationDate,
     onChange: e => handleDateChange(e.target.value),
     className: "input-field"
   })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-bold text-gray-600 mb-1"
+    className: "block text-sm font-medium text-gray-700 mb-1"
   }, "前回実施日 (自動/手動)"), /*#__PURE__*/React.createElement("input", {
     type: "date",
     value: formData.previousDate,
@@ -5554,7 +5655,7 @@ ${baseContext}
     }),
     className: "input-field"
   })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-bold text-gray-600 mb-1"
+    className: "block text-sm font-medium text-gray-700 mb-1"
   }, "対象期間 (自動)"), /*#__PURE__*/React.createElement("div", {
     className: "flex items-center gap-1"
   }, /*#__PURE__*/React.createElement("input", {
@@ -5582,12 +5683,12 @@ ${baseContext}
   })))), /*#__PURE__*/React.createElement("div", {
     className: "glass p-5 rounded-xl space-y-4"
   }, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-bold text-gray-600 mb-2"
+    className: "block text-sm font-medium text-gray-700 mb-2"
   }, "実施方法"), /*#__PURE__*/React.createElement("div", {
     className: "grid grid-cols-2 gap-2"
   }, ['commute', 'visit', 'phone', 'line', 'discord', 'googleForm'].map(key => /*#__PURE__*/React.createElement("label", {
     key: key,
-    className: `cursor-pointer p-2 rounded-lg border text-center text-sm transition ${formData.selectedMethod === key ? 'bg-green-100 border-green-500 text-green-800 font-bold' : 'bg-white border-gray-200 text-gray-500'}`
+    className: `cursor-pointer p-2 rounded-lg border text-center text-sm transition ${formData.selectedMethod === key ? 'bg-gray-900 border-gray-900 text-white' : 'bg-white border-gray-200 text-gray-600 hover:border-gray-400'}`
   }, /*#__PURE__*/React.createElement("input", {
     type: "radio",
     name: "method",
@@ -5604,7 +5705,7 @@ ${baseContext}
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     className: "flex justify-between items-center mb-1"
   }, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-bold text-gray-600"
+    className: "block text-sm font-medium text-gray-700"
   }, "体調について"), /*#__PURE__*/React.createElement("button", {
     onClick: () => generateSingleContent('condition'),
     disabled: loadingState.condition,
@@ -5622,7 +5723,7 @@ ${baseContext}
   })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     className: "flex justify-between items-center mb-1"
   }, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-bold text-gray-600"
+    className: "block text-sm font-medium text-gray-700"
   }, "在宅での作業内容について"), /*#__PURE__*/React.createElement("button", {
     onClick: () => generateSingleContent('workContent'),
     disabled: loadingState.workContent,
@@ -5640,7 +5741,7 @@ ${baseContext}
   })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     className: "flex justify-between items-center mb-1"
   }, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-bold text-gray-600"
+    className: "block text-sm font-medium text-gray-700"
   }, "今後の目標"), /*#__PURE__*/React.createElement("button", {
     onClick: () => generateSingleContent('goals'),
     disabled: loadingState.goals,
@@ -5662,7 +5763,7 @@ ${baseContext}
   }, /*#__PURE__*/React.createElement("div", {
     className: "flex-1"
   }, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-bold text-gray-600 mb-1"
+    className: "block text-sm font-medium text-gray-700 mb-1"
   }, "記録者 ", /*#__PURE__*/React.createElement("span", {
     className: "text-red-500"
   }, "*")), /*#__PURE__*/React.createElement("select", {
@@ -5682,7 +5783,7 @@ ${baseContext}
   }, name)))), /*#__PURE__*/React.createElement("div", {
     className: "flex-1"
   }, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-bold text-gray-600 mb-1"
+    className: "block text-sm font-medium text-gray-700 mb-1"
   }, "確認者"), /*#__PURE__*/React.createElement("select", {
     className: "input-field bg-white",
     value: formData.manager,
@@ -5699,14 +5800,14 @@ ${baseContext}
     value: name
   }, name)))), /*#__PURE__*/React.createElement("button", {
     onClick: saveRecord,
-    className: "btn btn-primary h-11 px-8 shadow-lg transform hover:-translate-y-1"
+    className: "btn btn-primary h-11 px-8"
   }, "記録を保存")), /*#__PURE__*/React.createElement("div", {
     className: "mt-3 text-right"
   }, /*#__PURE__*/React.createElement("button", {
     type: "button",
     onClick: () => setShowStaffEditor(!showStaffEditor),
-    className: "text-xs text-gray-500 hover:text-green-600 underline"
-  }, showStaffEditor ? "▲ 記録者・確認者の編集を閉じる" : "⚙ 記録者・確認者を追加・削除")), showStaffEditor && /*#__PURE__*/React.createElement("div", {
+    className: "text-xs text-gray-500 hover:text-gray-900 underline underline-offset-2"
+  }, showStaffEditor ? "記録者・確認者の編集を閉じる" : "記録者・確認者を追加・削除")), showStaffEditor && /*#__PURE__*/React.createElement("div", {
     className: "mt-3 pt-4 border-t border-gray-200 flex flex-wrap gap-6"
   }, /*#__PURE__*/React.createElement(StaffListEditor, {
     title: "記録者",
@@ -5719,10 +5820,8 @@ ${baseContext}
   })))))), view === 'users' && /*#__PURE__*/React.createElement("div", {
     className: "max-w-3xl mx-auto space-y-6"
   }, /*#__PURE__*/React.createElement("h2", {
-    className: "text-2xl font-bold text-gray-800 flex items-center gap-2"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "bg-blue-500 w-2 h-8 rounded-full inline-block"
-  }), "利用者情報の登録"), /*#__PURE__*/React.createElement("div", {
+    className: "page-title"
+  }, "利用者情報の登録"), /*#__PURE__*/React.createElement("div", {
     className: "glass p-6 rounded-xl"
   }, /*#__PURE__*/React.createElement(AddUserForm, {
     onAdd: user => {
@@ -5736,11 +5835,11 @@ ${baseContext}
   })), /*#__PURE__*/React.createElement("div", {
     className: "glass p-6 rounded-xl"
   }, /*#__PURE__*/React.createElement("h3", {
-    className: "font-bold text-gray-700 mb-4 border-b pb-2"
+    className: "section-title mb-4 pb-3 border-b border-gray-100"
   }, "登録済み利用者 (", users.length, "名)"), users.length === 0 ? /*#__PURE__*/React.createElement("p", {
     className: "text-gray-400"
   }, "利用者が登録されていません") : /*#__PURE__*/React.createElement("div", {
-    className: "grid gap-3"
+    className: "grid gap-2"
   }, sortedUsers.map(u => /*#__PURE__*/React.createElement(UserRow, {
     key: u.id,
     user: u,
@@ -5757,26 +5856,24 @@ ${baseContext}
   }))))), view === 'history' && /*#__PURE__*/React.createElement("div", {
     className: "max-w-5xl mx-auto space-y-6"
   }, /*#__PURE__*/React.createElement("h2", {
-    className: "text-2xl font-bold text-gray-800 flex items-center gap-2"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "bg-yellow-500 w-2 h-8 rounded-full inline-block"
-  }), "記録一覧・帳票出力"), /*#__PURE__*/React.createElement("div", {
-    className: "glass p-6 rounded-xl border-l-4 border-indigo-500"
+    className: "page-title"
+  }, "記録一覧・帳票出力"), /*#__PURE__*/React.createElement("div", {
+    className: "glass p-6 rounded-xl"
   }, /*#__PURE__*/React.createElement("h3", {
-    className: "font-bold text-indigo-700 mb-3 flex items-center gap-2"
-  }, "🤖 週評価の一括自動作成（AI言い回し変換）"), /*#__PURE__*/React.createElement("p", {
+    className: "section-title mb-2"
+  }, "週評価の一括自動作成（AI言い回し変換）"), /*#__PURE__*/React.createElement("p", {
     className: "text-sm text-gray-500 mb-4"
   }, "過去の記録がある全利用者について、前回の記録をもとにAIが言い回しを変えた新しい週評価を一括作成します。"), /*#__PURE__*/React.createElement("div", {
     className: "flex gap-4 items-end flex-wrap"
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-bold text-gray-600 mb-1"
+    className: "block text-sm font-medium text-gray-700 mb-1"
   }, "実施日"), /*#__PURE__*/React.createElement("input", {
     type: "date",
     className: "input-field",
     value: autoCreateTargetDate,
     onChange: e => setAutoCreateTargetDate(e.target.value)
   })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-bold text-gray-600 mb-1"
+    className: "block text-sm font-medium text-gray-700 mb-1"
   }, "対象期間 (自動計算)"), /*#__PURE__*/React.createElement("div", {
     className: "input-field bg-gray-100 text-gray-500 text-sm"
   }, (() => {
@@ -5793,24 +5890,18 @@ ${baseContext}
     return `${getFormattedDate(lastMon.toISOString().split('T')[0])} ～ ${getFormattedDate(lastSun.toISOString().split('T')[0])}`;
   })())), /*#__PURE__*/React.createElement("button", {
     onClick: prepareAutoCreate,
-    className: "btn bg-indigo-500 text-white hover:bg-indigo-600 h-11 px-6 shadow-lg transform hover:-translate-y-1 transition font-bold"
-  }, "🚀 一括自動作成")), /*#__PURE__*/React.createElement("p", {
+    className: "btn btn-primary h-11 px-6"
+  }, "一括自動作成")), /*#__PURE__*/React.createElement("p", {
     className: "text-xs text-gray-400 mt-3"
   }, "※ 同じ対象期間の記録が既に存在する利用者はスキップされます。")), /*#__PURE__*/React.createElement("div", {
     className: "flex gap-3 flex-wrap"
   }, /*#__PURE__*/React.createElement("button", {
     onClick: () => setShowIndividualWeeklyModal(true),
-    className: "btn px-5 py-3 text-white font-bold shadow-lg transform hover:-translate-y-1 transition rounded-xl",
-    style: {
-      background: 'linear-gradient(135deg, #10b981, #059669)'
-    }
-  }, "➕ 個別に週評価を作成"), /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-outline px-4 py-2"
+  }, /*#__PURE__*/React.createElement(Icons.FilePlus, null), "個別に週評価を作成"), /*#__PURE__*/React.createElement("button", {
     onClick: () => setShowIndividualMonthlyModal(true),
-    className: "btn px-5 py-3 text-white font-bold shadow-lg transform hover:-translate-y-1 transition rounded-xl",
-    style: {
-      background: 'linear-gradient(135deg, #f59e0b, #d97706)'
-    }
-  }, "➕ 個別に達成度評価を作成")), /*#__PURE__*/React.createElement(MonthlyExportPanel, {
+    className: "btn btn-outline px-4 py-2"
+  }, /*#__PURE__*/React.createElement(Icons.FilePlus, null), "個別に達成度評価を作成")), /*#__PURE__*/React.createElement(MonthlyExportPanel, {
     sortedUsers: sortedUsers,
     onExport: (userId, year, month) => exportMonthlyFormattedExcel(userId, year, month),
     onBulkExport: (year, month) => exportAllUsersMonthlyZip(year, month)
@@ -5819,7 +5910,7 @@ ${baseContext}
   }, /*#__PURE__*/React.createElement("table", {
     className: "w-full text-left border-collapse"
   }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", {
-    className: "border-b text-sm text-gray-500"
+    className: "border-b border-gray-200 text-xs font-medium text-gray-500"
   }, /*#__PURE__*/React.createElement("th", {
     className: "p-3"
   }, "実施日"), /*#__PURE__*/React.createElement("th", {
@@ -5834,11 +5925,11 @@ ${baseContext}
     const user = users.find(u => u.id === rec.userId);
     return /*#__PURE__*/React.createElement("tr", {
       key: rec.id,
-      className: "border-b hover:bg-gray-50 transition"
+      className: "border-b border-gray-100 last:border-0 hover:bg-gray-50 transition text-sm"
     }, /*#__PURE__*/React.createElement("td", {
       className: "p-3"
     }, rec.implementationDate), /*#__PURE__*/React.createElement("td", {
-      className: "p-3 font-bold"
+      className: "p-3 font-medium text-gray-900"
     }, user ? user.name : '削除済ユーザー'), /*#__PURE__*/React.createElement("td", {
       className: "p-3 text-sm"
     }, (() => {
@@ -5854,47 +5945,45 @@ ${baseContext}
     })()), /*#__PURE__*/React.createElement("td", {
       className: "p-3 text-sm"
     }, rec.recorder), /*#__PURE__*/React.createElement("td", {
-      className: "p-3 text-right flex justify-end gap-2"
+      className: "p-3 text-right flex justify-end gap-1"
     }, /*#__PURE__*/React.createElement("button", {
       onClick: () => printWeeklyRecord(rec),
-      className: "text-indigo-600 hover:underline text-sm font-bold"
-    }, "🖨️ 印刷"), /*#__PURE__*/React.createElement("button", {
+      className: "link-action"
+    }, "印刷"), /*#__PURE__*/React.createElement("button", {
       onClick: () => exportFormattedExcel(rec),
-      className: "text-green-600 hover:underline text-sm font-bold"
-    }, "📋 Excel"), /*#__PURE__*/React.createElement("button", {
+      className: "link-action"
+    }, "Excel"), /*#__PURE__*/React.createElement("button", {
       onClick: () => {
         if (confirm('削除しますか？')) {
           deleteRecordFromSupabase(rec.id);
           setRecords(records.filter(r => r.id !== rec.id));
         }
       },
-      className: "text-red-500 hover:underline text-sm"
+      className: "link-action link-danger"
     }, "削除")));
   }))), records.length === 0 && /*#__PURE__*/React.createElement("p", {
     className: "text-center text-gray-400 py-10"
   }, "記録がありません")), showIndividualWeeklyModal && /*#__PURE__*/React.createElement("div", {
-    className: "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4",
+    className: "fixed inset-0 bg-gray-900/40 flex items-center justify-center z-50 p-4",
     onClick: e => {
       if (e.target === e.currentTarget) setShowIndividualWeeklyModal(false);
     }
   }, /*#__PURE__*/React.createElement("div", {
-    className: "bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto",
+    className: "bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto",
     style: {
       animation: 'fadeIn 0.2s ease-out'
     }
   }, /*#__PURE__*/React.createElement("div", {
-    className: "sticky top-0 bg-white border-b px-6 py-4 rounded-t-2xl flex justify-between items-center z-10"
+    className: "sticky top-0 bg-white border-b border-gray-100 px-6 py-4 rounded-t-xl flex justify-between items-center z-10"
   }, /*#__PURE__*/React.createElement("h3", {
-    className: "text-xl font-bold text-gray-800 flex items-center gap-2"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "bg-green-500 w-2 h-6 rounded-full inline-block"
-  }), "個別に週評価を作成"), /*#__PURE__*/React.createElement("button", {
+    className: "text-base font-semibold text-gray-900 flex items-center gap-2"
+  }, "個別に週評価を作成"), /*#__PURE__*/React.createElement("button", {
     onClick: () => setShowIndividualWeeklyModal(false),
-    className: "text-gray-400 hover:text-gray-600 transition text-2xl leading-none"
+    className: "w-8 h-8 flex items-center justify-center rounded-md text-gray-400 hover:text-gray-900 hover:bg-gray-100 transition text-xl leading-none"
   }, "×")), /*#__PURE__*/React.createElement("div", {
     className: "p-6 space-y-5"
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-bold text-gray-600 mb-1"
+    className: "block text-sm font-medium text-gray-700 mb-1"
   }, "利用者 ", /*#__PURE__*/React.createElement("span", {
     className: "text-red-500"
   }, "*")), /*#__PURE__*/React.createElement("select", {
@@ -5935,7 +6024,7 @@ ${baseContext}
         setIndividualWeeklyData(newData);
       }
     },
-    className: "input-field font-bold"
+    className: "input-field font-medium"
   }, /*#__PURE__*/React.createElement("option", {
     value: ""
   }, "選択してください"), sortedUsers.map(u => /*#__PURE__*/React.createElement("option", {
@@ -5944,14 +6033,14 @@ ${baseContext}
   }, u.name)))), /*#__PURE__*/React.createElement("div", {
     className: "grid grid-cols-1 md:grid-cols-3 gap-4"
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-bold text-gray-600 mb-1"
+    className: "block text-sm font-medium text-gray-700 mb-1"
   }, "実施日"), /*#__PURE__*/React.createElement("input", {
     type: "date",
     className: "input-field",
     value: individualWeeklyData.implementationDate,
     onChange: e => handleIndividualWeeklyDateChange(e.target.value)
   })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-bold text-gray-600 mb-1"
+    className: "block text-sm font-medium text-gray-700 mb-1"
   }, "前回実施日"), /*#__PURE__*/React.createElement("input", {
     type: "date",
     className: "input-field",
@@ -5961,16 +6050,16 @@ ${baseContext}
       previousDate: e.target.value
     }))
   })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-bold text-gray-600 mb-1"
+    className: "block text-sm font-medium text-gray-700 mb-1"
   }, "対象期間"), /*#__PURE__*/React.createElement("div", {
     className: "input-field bg-gray-100 text-gray-500 text-sm"
   }, individualWeeklyData.periodStart && individualWeeklyData.periodEnd ? `${getFormattedDate(individualWeeklyData.periodStart)} ～ ${getFormattedDate(individualWeeklyData.periodEnd)}` : '利用者と日付を選択'))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-bold text-gray-600 mb-2"
+    className: "block text-sm font-medium text-gray-700 mb-2"
   }, "実施方法"), /*#__PURE__*/React.createElement("div", {
     className: "flex flex-wrap gap-2"
   }, ['commute', 'visit', 'phone', 'line', 'discord', 'googleForm'].map(key => /*#__PURE__*/React.createElement("label", {
     key: key,
-    className: `cursor-pointer px-3 py-1.5 rounded-lg border text-sm transition ${individualWeeklyData.selectedMethod === key ? 'bg-green-100 border-green-500 text-green-800 font-bold' : 'bg-white border-gray-200 text-gray-500'}`
+    className: `cursor-pointer px-3 py-1.5 rounded-lg border text-sm transition ${individualWeeklyData.selectedMethod === key ? 'bg-gray-900 border-gray-900 text-white' : 'bg-white border-gray-200 text-gray-600 hover:border-gray-400'}`
   }, /*#__PURE__*/React.createElement("input", {
     type: "radio",
     name: "indWeeklyMethod",
@@ -5997,7 +6086,7 @@ ${baseContext}
   }, /*#__PURE__*/React.createElement("div", {
     className: "flex justify-between items-center mb-1"
   }, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-bold text-gray-600"
+    className: "block text-sm font-medium text-gray-700"
   }, field.label), /*#__PURE__*/React.createElement("button", {
     onClick: () => generateIndividualWeeklyContent(field.key),
     disabled: individualWeeklyLoading[field.key],
@@ -6016,7 +6105,7 @@ ${baseContext}
   }))), /*#__PURE__*/React.createElement("div", {
     className: "grid grid-cols-1 md:grid-cols-2 gap-4"
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-bold text-gray-600 mb-1"
+    className: "block text-sm font-medium text-gray-700 mb-1"
   }, "記録者 ", /*#__PURE__*/React.createElement("span", {
     className: "text-red-500"
   }, "*")), /*#__PURE__*/React.createElement("input", {
@@ -6035,7 +6124,7 @@ ${baseContext}
     key: name,
     value: name
   })))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-bold text-gray-600 mb-1"
+    className: "block text-sm font-medium text-gray-700 mb-1"
   }, "確認者（管理責任者）"), /*#__PURE__*/React.createElement("input", {
     type: "text",
     className: "input-field",
@@ -6051,41 +6140,36 @@ ${baseContext}
     key: name,
     value: name
   })))))), /*#__PURE__*/React.createElement("div", {
-    className: "sticky bottom-0 bg-white border-t px-6 py-4 rounded-b-2xl flex justify-end gap-3"
+    className: "sticky bottom-0 bg-white border-t border-gray-100 px-6 py-4 rounded-b-xl flex justify-end gap-2"
   }, /*#__PURE__*/React.createElement("button", {
     onClick: () => setShowIndividualWeeklyModal(false),
-    className: "btn btn-ghost px-6 py-2.5"
+    className: "btn btn-outline px-5 py-2"
   }, "キャンセル"), /*#__PURE__*/React.createElement("button", {
     onClick: saveIndividualWeeklyRecord,
-    className: "btn px-8 py-2.5 text-white font-bold shadow-lg",
-    style: {
-      background: 'linear-gradient(135deg, #10b981, #059669)'
-    }
-  }, "✅ 保存する")))), showIndividualMonthlyModal && /*#__PURE__*/React.createElement("div", {
-    className: "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4",
+    className: "btn btn-primary px-6 py-2"
+  }, "保存する")))), showIndividualMonthlyModal && /*#__PURE__*/React.createElement("div", {
+    className: "fixed inset-0 bg-gray-900/40 flex items-center justify-center z-50 p-4",
     onClick: e => {
       if (e.target === e.currentTarget) setShowIndividualMonthlyModal(false);
     }
   }, /*#__PURE__*/React.createElement("div", {
-    className: "bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto",
+    className: "bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto",
     style: {
       animation: 'fadeIn 0.2s ease-out'
     }
   }, /*#__PURE__*/React.createElement("div", {
-    className: "sticky top-0 bg-white border-b px-6 py-4 rounded-t-2xl flex justify-between items-center z-10"
+    className: "sticky top-0 bg-white border-b border-gray-100 px-6 py-4 rounded-t-xl flex justify-between items-center z-10"
   }, /*#__PURE__*/React.createElement("h3", {
-    className: "text-xl font-bold text-gray-800 flex items-center gap-2"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "bg-amber-500 w-2 h-6 rounded-full inline-block"
-  }), "個別に達成度評価を作成"), /*#__PURE__*/React.createElement("button", {
+    className: "text-base font-semibold text-gray-900 flex items-center gap-2"
+  }, "個別に達成度評価を作成"), /*#__PURE__*/React.createElement("button", {
     onClick: () => setShowIndividualMonthlyModal(false),
-    className: "text-gray-400 hover:text-gray-600 transition text-2xl leading-none"
+    className: "w-8 h-8 flex items-center justify-center rounded-md text-gray-400 hover:text-gray-900 hover:bg-gray-100 transition text-xl leading-none"
   }, "×")), /*#__PURE__*/React.createElement("div", {
     className: "p-6 space-y-5"
   }, /*#__PURE__*/React.createElement("div", {
     className: "grid grid-cols-1 md:grid-cols-2 gap-4"
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-bold text-gray-600 mb-1"
+    className: "block text-sm font-medium text-gray-700 mb-1"
   }, "利用者 ", /*#__PURE__*/React.createElement("span", {
     className: "text-red-500"
   }, "*")), /*#__PURE__*/React.createElement("select", {
@@ -6094,14 +6178,14 @@ ${baseContext}
       ...prev,
       userId: e.target.value
     })),
-    className: "input-field font-bold"
+    className: "input-field font-medium"
   }, /*#__PURE__*/React.createElement("option", {
     value: ""
   }, "選択してください"), sortedUsers.map(u => /*#__PURE__*/React.createElement("option", {
     key: u.id,
     value: u.id
   }, u.name)))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-bold text-gray-600 mb-1"
+    className: "block text-sm font-medium text-gray-700 mb-1"
   }, "対象年月"), /*#__PURE__*/React.createElement("div", {
     className: "flex gap-2"
   }, /*#__PURE__*/React.createElement("select", {
@@ -6127,7 +6211,7 @@ ${baseContext}
   }, i + 1, "月")))))), /*#__PURE__*/React.createElement("div", {
     className: "grid grid-cols-1 md:grid-cols-3 gap-4"
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-bold text-gray-600 mb-1"
+    className: "block text-sm font-medium text-gray-700 mb-1"
   }, "実施日"), /*#__PURE__*/React.createElement("input", {
     type: "date",
     className: "input-field",
@@ -6137,7 +6221,7 @@ ${baseContext}
       implementationDate: e.target.value
     }))
   })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-bold text-gray-600 mb-1"
+    className: "block text-sm font-medium text-gray-700 mb-1"
   }, "開始時間"), /*#__PURE__*/React.createElement("input", {
     type: "time",
     className: "input-field",
@@ -6147,7 +6231,7 @@ ${baseContext}
       timeStart: e.target.value
     }))
   })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-bold text-gray-600 mb-1"
+    className: "block text-sm font-medium text-gray-700 mb-1"
   }, "終了時間"), /*#__PURE__*/React.createElement("input", {
     type: "time",
     className: "input-field",
@@ -6157,7 +6241,7 @@ ${baseContext}
       timeEnd: e.target.value
     }))
   }))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-bold text-gray-600 mb-2"
+    className: "block text-sm font-medium text-gray-700 mb-2"
   }, "実施方法"), /*#__PURE__*/React.createElement("div", {
     className: "flex flex-wrap gap-2"
   }, [{
@@ -6183,7 +6267,7 @@ ${baseContext}
     label: 'その他'
   }].map(m => /*#__PURE__*/React.createElement("label", {
     key: m.key,
-    className: `flex items-center gap-1.5 px-3 py-1.5 rounded-lg cursor-pointer border transition text-sm ${individualMonthlyData.method === m.key ? 'bg-amber-50 border-amber-400 text-amber-700 font-bold' : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'}`
+    className: `flex items-center gap-1.5 px-3 py-1.5 rounded-lg cursor-pointer border transition text-sm ${individualMonthlyData.method === m.key ? 'bg-gray-900 border-gray-900 text-white' : 'bg-white border-gray-200 text-gray-600 hover:border-gray-400'}`
   }, /*#__PURE__*/React.createElement("input", {
     type: "radio",
     name: "indMonthlyMethod",
@@ -6194,21 +6278,18 @@ ${baseContext}
       method: e.target.value
     })),
     className: "hidden"
-  }), individualMonthlyData.method === m.key ? '☑' : '□', " ", m.label)))), /*#__PURE__*/React.createElement("div", {
-    className: "bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-4 border border-indigo-200"
+  }), m.label)))), /*#__PURE__*/React.createElement("div", {
+    className: "bg-gray-50 rounded-lg p-4 border border-gray-200"
   }, /*#__PURE__*/React.createElement("div", {
     className: "flex items-center justify-between"
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("p", {
-    className: "font-bold text-indigo-700 text-sm"
-  }, "🤖 週評価データからAI自動生成"), /*#__PURE__*/React.createElement("p", {
+    className: "font-semibold text-gray-900 text-sm"
+  }, "週評価データからAI自動生成"), /*#__PURE__*/React.createElement("p", {
     className: "text-xs text-gray-500 mt-1"
   }, "選択した利用者の対象月の週評価データを元に、全項目を自動生成します")), /*#__PURE__*/React.createElement("button", {
     onClick: generateIndividualMonthlyAI,
     disabled: individualMonthlyLoading || !individualMonthlyData.userId,
-    className: `btn px-5 py-2.5 text-white font-bold shadow-lg rounded-xl transition ${individualMonthlyLoading ? 'bg-gray-400 cursor-not-allowed' : ''}`,
-    style: !individualMonthlyLoading ? {
-      background: 'linear-gradient(135deg, #6366f1, #8b5cf6)'
-    } : {}
+    className: "btn btn-primary px-4 py-2 flex-shrink-0"
   }, individualMonthlyLoading ? /*#__PURE__*/React.createElement("span", {
     className: "loading-dots"
   }, "AI生成中") : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(Icons.Sparkles, null), " AI一括生成")))), [{
@@ -6246,7 +6327,7 @@ ${baseContext}
   }].map(field => /*#__PURE__*/React.createElement("div", {
     key: field.key
   }, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-bold text-gray-600 mb-1"
+    className: "block text-sm font-medium text-gray-700 mb-1"
   }, field.label), /*#__PURE__*/React.createElement("textarea", {
     className: "input-field resize-y",
     rows: field.rows,
@@ -6258,7 +6339,7 @@ ${baseContext}
   }))), /*#__PURE__*/React.createElement("div", {
     className: "grid grid-cols-1 md:grid-cols-2 gap-4"
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-bold text-gray-600 mb-1"
+    className: "block text-sm font-medium text-gray-700 mb-1"
   }, "評価実施者"), /*#__PURE__*/React.createElement("input", {
     type: "text",
     className: "input-field",
@@ -6268,7 +6349,7 @@ ${baseContext}
       evaluator: e.target.value
     }))
   })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-bold text-gray-600 mb-1"
+    className: "block text-sm font-medium text-gray-700 mb-1"
   }, "前回の達成度評価日"), /*#__PURE__*/React.createElement("input", {
     type: "date",
     className: "input-field",
@@ -6278,36 +6359,27 @@ ${baseContext}
       previousEvalDate: e.target.value
     }))
   })))), /*#__PURE__*/React.createElement("div", {
-    className: "sticky bottom-0 bg-white border-t px-6 py-4 rounded-b-2xl flex justify-end gap-3"
+    className: "sticky bottom-0 bg-white border-t border-gray-100 px-6 py-4 rounded-b-xl flex justify-end gap-2"
   }, /*#__PURE__*/React.createElement("button", {
     onClick: () => setShowIndividualMonthlyModal(false),
-    className: "btn btn-ghost px-6 py-2.5"
+    className: "btn btn-outline px-5 py-2"
   }, "キャンセル"), /*#__PURE__*/React.createElement("button", {
     onClick: saveIndividualMonthlyEval,
-    className: "btn px-8 py-2.5 text-white font-bold shadow-lg",
-    style: {
-      background: 'linear-gradient(135deg, #f59e0b, #d97706)'
-    }
-  }, "✅ 保存する"))))), view === 'monthly' && /*#__PURE__*/React.createElement("div", {
+    className: "btn btn-primary px-6 py-2"
+  }, "保存する"))))), view === 'monthly' && /*#__PURE__*/React.createElement("div", {
     className: "max-w-4xl mx-auto space-y-6"
   }, /*#__PURE__*/React.createElement("h2", {
-    className: "text-2xl font-bold text-gray-800 flex items-center gap-2"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "bg-amber-500 w-2 h-8 rounded-full inline-block"
-  }), "在宅における就労達成度評価シート"), /*#__PURE__*/React.createElement("div", {
+    className: "page-title"
+  }, "在宅における就労達成度評価シート"), /*#__PURE__*/React.createElement("div", {
     className: "glass p-6 rounded-xl"
   }, /*#__PURE__*/React.createElement("div", {
     className: "grid grid-cols-1 md:grid-cols-2 gap-4"
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-bold text-gray-600 mb-1"
+    className: "block text-sm font-medium text-gray-700 mb-1"
   }, "対象年月"), /*#__PURE__*/React.createElement("div", {
     className: "flex gap-2"
   }, /*#__PURE__*/React.createElement("select", {
     className: "input-field",
-    style: {
-      fontSize: '0.8rem',
-      padding: '0.4rem'
-    },
     value: monthlyFormData.targetYear,
     onChange: e => {
       const newY = Number(e.target.value);
@@ -6329,43 +6401,43 @@ ${baseContext}
     key: i + 1,
     value: i + 1
   }, i + 1, "月"))))))), /*#__PURE__*/React.createElement("div", {
-    className: "glass p-6 rounded-xl border-l-4 border-amber-400"
+    className: "glass p-6 rounded-xl"
   }, /*#__PURE__*/React.createElement("h3", {
-    className: "font-bold text-amber-700 mb-3 flex items-center gap-2"
-  }, React.createElement(React.Fragment, null, "📅 達成度評価の一括自動作成（毎月15日）", React.createElement("span", { className: "text-xs px-2 py-0.5 bg-green-100 text-green-800 rounded font-normal ml-2" }, "v2.5.2 最新版"))), /*#__PURE__*/React.createElement("p", {
+    className: "section-title mb-2"
+  }, React.createElement(React.Fragment, null, "達成度評価の一括自動作成（毎月15日）", React.createElement("span", { className: "text-[11px] px-1.5 py-0.5 border border-gray-200 text-gray-500 rounded font-normal ml-1" }, "v2.5.2 最新版"))), /*#__PURE__*/React.createElement("p", {
     className: "text-sm text-gray-500 mb-4"
   }, "選択中の対象年月（", monthlyFormData.targetYear, "年", monthlyFormData.targetMonth, "月）について、 週評価データが存在する全利用者の達成度評価を一括で自動作成します。", /*#__PURE__*/React.createElement("br", null), "※作業時間Excelファイルを添付すると、各利用者の「15日以降の施設外就労（来所）日」を自動検出して実施日に設定します（添付なしの場合は15日）。"), /*#__PURE__*/React.createElement("div", {
     className: "mb-4"
   }, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-bold text-gray-600 mb-1"
+    className: "block text-sm font-medium text-gray-700 mb-1"
   }, "作業時間エクセルデータ (任意)"), /*#__PURE__*/React.createElement("div", {
     className: "flex items-center gap-2"
   }, /*#__PURE__*/React.createElement("input", {
     type: "file",
     accept: ".xlsx, .xls",
     onChange: e => handleExcelFileChange(e.target.files[0] || null),
-    className: "block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-amber-50 file:text-amber-700 hover:file:bg-amber-100"
+    className: "block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-gray-100 file:text-gray-700 hover:file:bg-gray-200 file:cursor-pointer"
   }), monthlyExcelFile && /*#__PURE__*/React.createElement("button", {
     type: "button",
     onClick: () => handleExcelFileChange(null),
-    className: "btn bg-gray-200 hover:bg-gray-300 text-gray-700 text-xs px-2 py-1 rounded whitespace-nowrap"
-  }, "✕ 解除")), excelParsing && /*#__PURE__*/React.createElement("div", {
-    className: "mt-2 text-xs text-amber-600 flex items-center gap-1"
+    className: "btn btn-outline text-xs px-3 py-1.5 whitespace-nowrap"
+  }, "解除")), excelParsing && /*#__PURE__*/React.createElement("div", {
+    className: "mt-2 text-xs text-gray-500 flex items-center gap-1"
   }, /*#__PURE__*/React.createElement("span", {
     className: "loading-dots"
-  }, "🔄 Excelファイルを解析中…")), excelPreviewInfo && excelPreviewInfo.success && /*#__PURE__*/React.createElement("div", {
+  }, "Excelファイルを解析中")), excelPreviewInfo && excelPreviewInfo.success && /*#__PURE__*/React.createElement("div", {
     className: "mt-3 p-3 bg-green-50 border border-green-200 rounded-lg text-xs text-green-900"
   }, /*#__PURE__*/React.createElement("div", {
     className: "font-bold text-green-800 flex items-center gap-1 mb-1"
-  }, "✅ Excel解析成功: ", excelPreviewInfo.fileName, " (シート: ", excelPreviewInfo.sheetName, ")"), /*#__PURE__*/React.createElement("div", {
+  }, "Excel解析成功: ", excelPreviewInfo.fileName, " (シート: ", excelPreviewInfo.sheetName, ")"), /*#__PURE__*/React.createElement("div", {
     className: "text-gray-600 mb-2"
   }, "対象月（", monthlyFormData.targetMonth, "月）の15日以降に来所（施設外就労）した日を自動検出しました："), /*#__PURE__*/React.createElement("div", {
     className: "flex flex-wrap gap-1 mb-2"
   }, excelPreviewInfo.detectedList && excelPreviewInfo.detectedList.length > 0 ? excelPreviewInfo.detectedList.map(item => /*#__PURE__*/React.createElement("span", {
     key: item.userId,
-    className: "inline-flex items-center gap-1 px-2 py-1 bg-white border border-green-300 rounded shadow-sm text-green-900 font-semibold"
+    className: "inline-flex items-center gap-1 px-2 py-1 bg-white border border-gray-200 rounded text-gray-800 font-medium"
   }, item.userName, ": ", /*#__PURE__*/React.createElement("span", {
-    className: "text-amber-600 font-bold"
+    className: "text-gray-900 font-semibold"
   }, item.chosenDay, "日"), /*#__PURE__*/React.createElement("span", {
     className: "text-gray-400 text-[10px]"
   }, "(", item.status, ")"))) : /*#__PURE__*/React.createElement("span", {
@@ -6376,43 +6448,40 @@ ${baseContext}
     className: "mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-800"
   }, /*#__PURE__*/React.createElement("div", {
     className: "font-bold mb-1"
-  }, "⚠️ Excel解析警告"), /*#__PURE__*/React.createElement("p", null, excelPreviewInfo.error))), /*#__PURE__*/React.createElement("button", {
+  }, "Excel解析警告"), /*#__PURE__*/React.createElement("p", null, excelPreviewInfo.error))), /*#__PURE__*/React.createElement("button", {
     onClick: autoCreateAllMonthlyEvaluations,
     disabled: bulkCreating,
-    className: `btn px-8 py-3 shadow-lg transform hover:-translate-y-1 transition text-base font-bold ${bulkCreating ? 'bg-gray-400 cursor-not-allowed' : 'bg-amber-500 text-white hover:bg-amber-600'}`
+    className: "btn btn-primary px-6 py-2.5"
   }, bulkCreating ? /*#__PURE__*/React.createElement("span", {
     className: "loading-dots"
-  }, "📝 AI生成中…お待ちください") : '🚀 全利用者の達成度評価を自動作成')), (() => {
+  }, "AI生成中…お待ちください") : '全利用者の達成度評価を自動作成')), (() => {
     const filteredEvals = savedMonthlyEvals.filter(e => e.targetYear === monthlyFormData.targetYear && e.targetMonth === monthlyFormData.targetMonth).sort((a, b) => {
       const userA = users.find(u => u.id === a.userId);
       const userB = users.find(u => u.id === b.userId);
       return (userA?.furigana || userA?.name || '').localeCompare(userB?.furigana || userB?.name || '', 'ja');
     });
     return filteredEvals.length > 0 && /*#__PURE__*/React.createElement("div", {
-      className: "glass p-6 rounded-xl border-l-4 border-green-500"
+      className: "glass p-6 rounded-xl"
     }, /*#__PURE__*/React.createElement("div", {
       className: "flex justify-between items-center mb-4"
     }, /*#__PURE__*/React.createElement("h3", {
-      className: "font-bold text-green-700 flex items-center gap-2"
-    }, "📋 作成済み達成度評価（", monthlyFormData.targetYear, "年", monthlyFormData.targetMonth, "月） — ", filteredEvals.length, "件"), /*#__PURE__*/React.createElement("div", {
+      className: "section-title"
+    }, "作成済み達成度評価（", monthlyFormData.targetYear, "年", monthlyFormData.targetMonth, "月） — ", filteredEvals.length, "件"), /*#__PURE__*/React.createElement("div", {
       className: "flex gap-2"
     }, /*#__PURE__*/React.createElement("button", {
       onClick: () => printAllMonthlyEvals(filteredEvals),
-      className: "btn px-4 py-2 text-sm font-bold text-white shadow",
-      style: {
-        background: 'linear-gradient(135deg, #6366f1, #8b5cf6)'
-      }
-    }, "🖨️ 一括印刷"), /*#__PURE__*/React.createElement("button", {
+      className: "btn btn-outline px-3 py-1.5"
+    }, "一括印刷"), /*#__PURE__*/React.createElement("button", {
       onClick: () => {
         filteredEvals.forEach(evalData => exportSavedMonthlyExcel(evalData));
       },
-      className: "btn btn-primary px-4 py-2 text-sm"
+      className: "btn btn-primary px-3 py-1.5"
     }, /*#__PURE__*/React.createElement(Icons.Download, null), " 全件ダウンロード"))), /*#__PURE__*/React.createElement("div", {
       className: "overflow-hidden rounded-lg border border-gray-200"
     }, /*#__PURE__*/React.createElement("table", {
       className: "w-full text-left border-collapse"
     }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", {
-      className: "bg-gray-50 border-b text-sm text-gray-500"
+      className: "bg-gray-50 border-b border-gray-200 text-xs font-medium text-gray-500"
     }, /*#__PURE__*/React.createElement("th", {
       className: "p-3"
     }, "対象者名"), /*#__PURE__*/React.createElement("th", {
@@ -6427,9 +6496,9 @@ ${baseContext}
       const user = users.find(u => u.id === evalData.userId);
       return /*#__PURE__*/React.createElement("tr", {
         key: evalData.id,
-        className: "border-b hover:bg-gray-50 transition"
+        className: "border-b border-gray-100 last:border-0 hover:bg-gray-50 transition text-sm"
       }, /*#__PURE__*/React.createElement("td", {
-        className: "p-3 font-bold"
+        className: "p-3 font-medium text-gray-900"
       }, user ? user.name : '削除済ユーザー'), /*#__PURE__*/React.createElement("td", {
         className: "p-3 text-sm"
       }, evalData.implementationDate), /*#__PURE__*/React.createElement("td", {
@@ -6437,74 +6506,72 @@ ${baseContext}
       }, evalData.trainingGoal?.substring(0, 40), evalData.trainingGoal?.length > 40 ? '...' : ''), /*#__PURE__*/React.createElement("td", {
         className: "p-3 text-xs text-gray-400"
       }, evalData.createdAt ? new Date(evalData.createdAt).toLocaleString('ja-JP') : ''), /*#__PURE__*/React.createElement("td", {
-        className: "p-3 text-right flex justify-end gap-2"
+        className: "p-3 text-right flex justify-end gap-1"
       }, /*#__PURE__*/React.createElement("button", {
         onClick: () => startEditMonthlyEval(evalData),
-        className: "text-amber-600 hover:underline text-sm font-bold"
-      }, "✏️ 編集"), /*#__PURE__*/React.createElement("button", {
+        className: "link-action"
+      }, "編集"), /*#__PURE__*/React.createElement("button", {
         onClick: () => printAllMonthlyEvals([evalData]),
-        className: "text-indigo-600 hover:underline text-sm font-bold"
-      }, "🖨️ 印刷"), /*#__PURE__*/React.createElement("button", {
+        className: "link-action"
+      }, "印刷"), /*#__PURE__*/React.createElement("button", {
         onClick: () => exportSavedMonthlyExcel(evalData),
-        className: "text-green-600 hover:underline text-sm font-bold"
-      }, "📥 Excel"), /*#__PURE__*/React.createElement("button", {
+        className: "link-action"
+      }, "Excel"), /*#__PURE__*/React.createElement("button", {
         onClick: () => deleteMonthlyEval(evalData.id),
-        className: "text-red-500 hover:underline text-sm"
+        className: "link-action link-danger"
       }, "削除")));
     })))), /*#__PURE__*/React.createElement("p", {
       className: "text-xs text-gray-400 mt-3"
-    }, "※ 各行の「🖨️ 印刷」で個別印刷、「📥 Excel」で個別ダウンロード、右上の「🖨️ 一括印刷」で全員分をまとめて印刷できます。"));
+    }, "※ 各行の「印刷」で個別印刷、「Excel」で個別ダウンロード、右上の「一括印刷」で全員分をまとめて印刷できます。"));
   })(), editingMonthlyEvalId && editMonthlyEvalData && /*#__PURE__*/React.createElement("div", {
-    className: "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4",
+    className: "fixed inset-0 bg-gray-900/40 flex items-center justify-center z-50 p-4",
     onClick: e => {
       if (e.target === e.currentTarget) cancelEditMonthlyEval();
     }
   }, /*#__PURE__*/React.createElement("div", {
-    className: "bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto",
+    className: "bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto",
     style: {
       animation: 'fadeIn 0.2s ease-out'
     }
   }, /*#__PURE__*/React.createElement("div", {
-    className: "sticky top-0 bg-white border-b px-6 py-4 rounded-t-2xl flex justify-between items-center z-10"
+    className: "sticky top-0 bg-white border-b border-gray-100 px-6 py-4 rounded-t-xl flex justify-between items-center z-10"
   }, /*#__PURE__*/React.createElement("h3", {
-    className: "text-xl font-bold text-gray-800 flex items-center gap-2"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "bg-amber-500 w-2 h-6 rounded-full inline-block"
-  }), "達成度評価を編集", /*#__PURE__*/React.createElement("span", {
+    className: "text-base font-semibold text-gray-900 flex items-center gap-2"
+  }, "達成度評価を編集", /*#__PURE__*/React.createElement("span", {
     className: "text-sm font-normal text-gray-500 ml-2"
   }, (() => {
     const u = users.find(u => u.id === editMonthlyEvalData.userId);
     return u ? u.name : '';
   })(), "（", editMonthlyEvalData.targetYear, "年", editMonthlyEvalData.targetMonth, "月）")), /*#__PURE__*/React.createElement("button", {
     onClick: cancelEditMonthlyEval,
-    className: "text-gray-400 hover:text-gray-600 transition text-2xl leading-none"
+    className: "w-8 h-8 flex items-center justify-center rounded-md text-gray-400 hover:text-gray-900 hover:bg-gray-100 transition text-xl leading-none"
   }, "×")), /*#__PURE__*/React.createElement("div", {
     className: "p-6 space-y-5"
   }, /*#__PURE__*/React.createElement("div", {
     className: "grid grid-cols-1 md:grid-cols-3 gap-4"
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-bold text-gray-600 mb-1"
+    className: "block text-sm font-medium text-gray-700 mb-1"
   }, "実施日"), /*#__PURE__*/React.createElement("input", {
     type: "date",
     className: "input-field",
     value: editMonthlyEvalData.implementationDate || '',
     onChange: e => updateEditField('implementationDate', e.target.value)
   })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-bold text-gray-600 mb-1"
+    className: "block text-sm font-medium text-gray-700 mb-1"
   }, "開始時間"), /*#__PURE__*/React.createElement("input", {
     type: "time",
     className: "input-field",
     value: editMonthlyEvalData.timeStart || '',
     onChange: e => updateEditField('timeStart', e.target.value)
   })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-bold text-gray-600 mb-1"
+    className: "block text-sm font-medium text-gray-700 mb-1"
   }, "終了時間"), /*#__PURE__*/React.createElement("input", {
     type: "time",
     className: "input-field",
     value: editMonthlyEvalData.timeEnd || '',
     onChange: e => updateEditField('timeEnd', e.target.value)
   }))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-bold text-gray-600 mb-1"
+    className: "block text-sm font-medium text-gray-700 mb-1"
   }, "実施方法"), /*#__PURE__*/React.createElement("div", {
     className: "flex flex-wrap gap-3"
   }, [{
@@ -6530,7 +6597,7 @@ ${baseContext}
     label: 'その他'
   }].map(m => /*#__PURE__*/React.createElement("label", {
     key: m.key,
-    className: `flex items-center gap-1.5 px-3 py-1.5 rounded-lg cursor-pointer border transition text-sm ${editMonthlyEvalData.method === m.key ? 'bg-amber-50 border-amber-400 text-amber-700 font-bold' : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'}`
+    className: `flex items-center gap-1.5 px-3 py-1.5 rounded-lg cursor-pointer border transition text-sm ${editMonthlyEvalData.method === m.key ? 'bg-gray-900 border-gray-900 text-white' : 'bg-white border-gray-200 text-gray-600 hover:border-gray-400'}`
   }, /*#__PURE__*/React.createElement("input", {
     type: "radio",
     name: "editMethod",
@@ -6538,7 +6605,7 @@ ${baseContext}
     checked: editMonthlyEvalData.method === m.key,
     onChange: e => updateEditField('method', e.target.value),
     className: "hidden"
-  }), editMonthlyEvalData.method === m.key ? '☑' : '□', " ", m.label)))), [{
+  }), m.label)))), [{
     key: 'trainingGoal',
     label: '訓練目標',
     rows: 4
@@ -6573,7 +6640,7 @@ ${baseContext}
   }].map(field => /*#__PURE__*/React.createElement("div", {
     key: field.key
   }, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-bold text-gray-600 mb-1"
+    className: "block text-sm font-medium text-gray-700 mb-1"
   }, field.label), /*#__PURE__*/React.createElement("textarea", {
     className: "input-field resize-y",
     rows: field.rows,
@@ -6582,53 +6649,48 @@ ${baseContext}
   }))), /*#__PURE__*/React.createElement("div", {
     className: "grid grid-cols-1 md:grid-cols-2 gap-4"
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-bold text-gray-600 mb-1"
+    className: "block text-sm font-medium text-gray-700 mb-1"
   }, "評価実施者"), /*#__PURE__*/React.createElement("input", {
     type: "text",
     className: "input-field",
     value: editMonthlyEvalData.evaluator || '',
     onChange: e => updateEditField('evaluator', e.target.value)
   })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-bold text-gray-600 mb-1"
+    className: "block text-sm font-medium text-gray-700 mb-1"
   }, "前回の達成度評価日"), /*#__PURE__*/React.createElement("input", {
     type: "date",
     className: "input-field",
     value: editMonthlyEvalData.previousEvalDate || '',
     onChange: e => updateEditField('previousEvalDate', e.target.value)
   })))), /*#__PURE__*/React.createElement("div", {
-    className: "sticky bottom-0 bg-white border-t px-6 py-4 rounded-b-2xl flex justify-end gap-3"
+    className: "sticky bottom-0 bg-white border-t border-gray-100 px-6 py-4 rounded-b-xl flex justify-end gap-2"
   }, /*#__PURE__*/React.createElement("button", {
     onClick: cancelEditMonthlyEval,
-    className: "btn btn-ghost px-6 py-2.5"
+    className: "btn btn-outline px-5 py-2"
   }, "キャンセル"), /*#__PURE__*/React.createElement("button", {
     onClick: saveEditMonthlyEval,
-    className: "btn px-8 py-2.5 text-white font-bold shadow-lg",
-    style: {
-      background: 'linear-gradient(135deg, #f59e0b, #d97706)'
-    }
-  }, "✅ 保存する"))))), view === 'settings' && /*#__PURE__*/React.createElement("div", {
+    className: "btn btn-primary px-6 py-2"
+  }, "保存する"))))), view === 'settings' && /*#__PURE__*/React.createElement("div", {
     className: "max-w-3xl mx-auto space-y-6"
   }, /*#__PURE__*/React.createElement("h2", {
-    className: "text-2xl font-bold text-gray-800 flex items-center gap-2"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "bg-gray-500 w-2 h-8 rounded-full inline-block"
-  }), "設定"), /*#__PURE__*/React.createElement("div", {
+    className: "page-title"
+  }, "設定"), /*#__PURE__*/React.createElement("div", {
     className: "glass p-6 rounded-xl space-y-6"
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h3", {
-    className: "font-bold text-gray-700 mb-2 flex items-center gap-2"
-  }, "🔑 Gemini APIキー"), /*#__PURE__*/React.createElement("p", {
+    className: "section-title mb-2"
+  }, "Gemini APIキー"), /*#__PURE__*/React.createElement("p", {
     className: "text-sm text-gray-500 mb-3"
   }, "AI自動生成機能（週評価・達成度評価の文章自動作成）を利用するには、Google Gemini APIキーが必要です。", /*#__PURE__*/React.createElement("br", null), /*#__PURE__*/React.createElement("a", {
     href: "https://aistudio.google.com/app/apikey",
     target: "_blank",
     rel: "noopener noreferrer",
-    className: "text-blue-500 underline hover:text-blue-700"
+    className: "text-gray-900 underline underline-offset-2 hover:text-gray-600"
   }, "Google AI Studio でAPIキーを取得")), /*#__PURE__*/React.createElement("div", {
     className: "flex gap-3 items-end"
   }, /*#__PURE__*/React.createElement("div", {
     className: "flex-1"
   }, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-bold text-gray-600 mb-1"
+    className: "block text-sm font-medium text-gray-700 mb-1"
   }, "APIキー"), /*#__PURE__*/React.createElement("input", {
     type: "password",
     className: "input-field",
@@ -6639,7 +6701,7 @@ ${baseContext}
     onClick: () => {
       if (apiKey) {
         localStorage.setItem('sw_api_key', apiKey);
-        alert('✅ APIキーを保存しました。');
+        alert('APIキーを保存しました。');
       } else {
         localStorage.removeItem('sw_api_key');
         alert('APIキーを削除しました。');
@@ -6662,15 +6724,15 @@ ${baseContext}
         const result = await model.generateContent('テスト。「OK」とだけ返してください。');
         const response = await result.response;
         if (response.text()) {
-          alert('✅ APIキーは有効です。AI生成が利用できます。');
+          alert('APIキーは有効です。AI生成が利用できます。');
         } else {
-          alert('⚠️ APIキーのテストに失敗しました。レスポンスが空です。');
+          alert('APIキーのテストに失敗しました。レスポンスが空です。');
         }
       } catch (e) {
-        alert('❌ APIキーが無効です。エラー: ' + e.message);
+        alert('APIキーが無効です。エラー: ' + e.message);
       }
     },
-    className: "text-sm text-blue-500 hover:underline cursor-pointer ml-2"
+    className: "text-sm text-gray-700 underline underline-offset-2 hover:text-gray-900 cursor-pointer ml-2"
   }, "接続テスト")), !apiKey && /*#__PURE__*/React.createElement("div", {
     className: "mt-3 flex items-center gap-2"
   }, /*#__PURE__*/React.createElement("span", {
@@ -6680,35 +6742,35 @@ ${baseContext}
   }, "APIキーが未設定です（AI生成機能は利用できません）")))), /*#__PURE__*/React.createElement("div", {
     className: "glass p-6 rounded-xl"
   }, /*#__PURE__*/React.createElement("h3", {
-    className: "font-bold text-gray-700 mb-2 flex items-center gap-2"
-  }, "📊 データ状態"), /*#__PURE__*/React.createElement("div", {
-    className: "grid grid-cols-2 md:grid-cols-4 gap-4 text-center"
+    className: "section-title mb-2"
+  }, "データ状態"), /*#__PURE__*/React.createElement("div", {
+    className: "grid grid-cols-2 md:grid-cols-4 gap-3 text-center mt-1"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "bg-blue-50 p-4 rounded-lg"
+    className: "bg-gray-50 border border-gray-100 p-4 rounded-lg"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "text-2xl font-bold text-blue-600"
+    className: "text-2xl font-semibold text-gray-900"
   }, users.length), /*#__PURE__*/React.createElement("div", {
     className: "text-xs text-gray-500 mt-1"
   }, "登録利用者")), /*#__PURE__*/React.createElement("div", {
-    className: "bg-green-50 p-4 rounded-lg"
+    className: "bg-gray-50 border border-gray-100 p-4 rounded-lg"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "text-2xl font-bold text-green-600"
+    className: "text-2xl font-semibold text-gray-900"
   }, records.length), /*#__PURE__*/React.createElement("div", {
     className: "text-xs text-gray-500 mt-1"
   }, "週評価記録")), /*#__PURE__*/React.createElement("div", {
-    className: "bg-amber-50 p-4 rounded-lg"
+    className: "bg-gray-50 border border-gray-100 p-4 rounded-lg"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "text-2xl font-bold text-amber-600"
+    className: "text-2xl font-semibold text-gray-900"
   }, savedMonthlyEvals.length), /*#__PURE__*/React.createElement("div", {
     className: "text-xs text-gray-500 mt-1"
   }, "達成度評価")), /*#__PURE__*/React.createElement("div", {
-    className: "bg-purple-50 p-4 rounded-lg"
+    className: "bg-gray-50 border border-gray-100 p-4 rounded-lg"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "text-2xl font-bold text-purple-600"
+    className: "text-2xl font-semibold text-gray-900"
   }, supabaseStatus === 'connected' ? '接続' : supabaseStatus === 'local' ? 'ローカル' : 'エラー'), /*#__PURE__*/React.createElement("div", {
     className: "text-xs text-gray-500 mt-1"
   }, "DB状態"))), /*#__PURE__*/React.createElement("div", {
-    className: "border-t pt-4 space-y-3"
+    className: "border-t border-gray-100 pt-5 mt-6 space-y-3"
   }, /*#__PURE__*/React.createElement("div", {
     className: "text-sm text-gray-600 flex justify-between items-center"
   }, /*#__PURE__*/React.createElement("span", null, "現在のアカウント: ", /*#__PURE__*/React.createElement("strong", {
@@ -6716,15 +6778,15 @@ ${baseContext}
   }, accountName), " (", accountId, ")"), /*#__PURE__*/React.createElement("button", {
     type: "button",
     onClick: loadData,
-    className: "text-xs text-blue-600 hover:underline flex items-center gap-1"
-  }, "🔄 Supabaseから再読込")), /*#__PURE__*/React.createElement("p", {
+    className: "text-xs text-gray-700 underline underline-offset-2 hover:text-gray-900 flex items-center gap-1"
+  }, "Supabaseから再読込")), /*#__PURE__*/React.createElement("p", {
     className: "text-xs text-gray-500"
   }, "このブラウザに保存されているデータ（利用者・週評価・達成度評価）を、現在のアカウント名義で Supabase クラウドデータベースに一括送信・保存します。"), /*#__PURE__*/React.createElement("button", {
     type: "button",
     onClick: syncAllLocalDataToSupabase,
     disabled: syncingAll,
-    className: "btn btn-primary w-full py-3 flex items-center justify-center gap-2 shadow"
-  }, syncingAll ? "同期中..." : "☁️ ブラウザの全データを Supabase に同期（アップロード）"))))));
+    className: "btn btn-outline w-full py-2.5"
+  }, syncingAll ? "同期中..." : "ブラウザの全データを Supabase に同期（アップロード）"))))));
 };
 
 // サブコンポーネント: 利用者行（編集対応）
@@ -6758,13 +6820,13 @@ const UserRow = ({
   };
   if (editing) {
     return /*#__PURE__*/React.createElement("div", {
-      className: "p-4 bg-blue-50 rounded border-2 border-blue-300 space-y-3"
+      className: "p-4 bg-gray-50 rounded-lg border border-gray-300 space-y-3"
     }, /*#__PURE__*/React.createElement("div", {
       className: "flex gap-3 flex-wrap"
     }, /*#__PURE__*/React.createElement("div", {
       className: "flex-1 min-w-[120px]"
     }, /*#__PURE__*/React.createElement("label", {
-      className: "block text-xs font-bold text-gray-500 mb-1"
+      className: "block text-xs font-medium text-gray-600 mb-1"
     }, "氏名"), /*#__PURE__*/React.createElement("input", {
       className: "input-field",
       value: editName,
@@ -6772,7 +6834,7 @@ const UserRow = ({
     })), /*#__PURE__*/React.createElement("div", {
       className: "flex-1 min-w-[120px]"
     }, /*#__PURE__*/React.createElement("label", {
-      className: "block text-xs font-bold text-gray-500 mb-1"
+      className: "block text-xs font-medium text-gray-600 mb-1"
     }, "ふりがな"), /*#__PURE__*/React.createElement("input", {
       className: "input-field",
       value: editFurigana,
@@ -6780,7 +6842,7 @@ const UserRow = ({
     })), /*#__PURE__*/React.createElement("div", {
       className: "flex-1 min-w-[120px]"
     }, /*#__PURE__*/React.createElement("label", {
-      className: "block text-xs font-bold text-gray-500 mb-1"
+      className: "block text-xs font-medium text-gray-600 mb-1"
     }, "受給者証番号"), /*#__PURE__*/React.createElement("input", {
       className: "input-field",
       value: editNumber,
@@ -6789,25 +6851,25 @@ const UserRow = ({
       className: "flex gap-2 justify-end"
     }, /*#__PURE__*/React.createElement("button", {
       onClick: handleCancel,
-      className: "btn btn-ghost text-gray-500 text-sm"
+      className: "btn btn-outline"
     }, "キャンセル"), /*#__PURE__*/React.createElement("button", {
       onClick: handleSave,
-      className: "btn btn-primary text-sm px-4"
+      className: "btn btn-primary px-4"
     }, "保存")));
   }
   return /*#__PURE__*/React.createElement("div", {
-    className: "flex justify-between items-center p-3 bg-white rounded border hover:shadow-sm transition"
+    className: "flex justify-between items-center px-4 py-3 bg-white rounded-lg border border-gray-200 hover:border-gray-300 transition"
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-    className: "font-bold text-lg"
+    className: "font-medium text-gray-900"
   }, user.name, " ", user.furigana && /*#__PURE__*/React.createElement("span", {
-    className: "text-sm text-gray-400 ml-2"
+    className: "text-xs text-gray-400 ml-1 font-normal"
   }, "(", user.furigana, ")")), /*#__PURE__*/React.createElement("div", {
     className: "text-sm text-gray-500"
   }, user.number)), /*#__PURE__*/React.createElement("div", {
     className: "flex gap-2"
   }, /*#__PURE__*/React.createElement("button", {
     onClick: () => setEditing(true),
-    className: "btn btn-ghost text-blue-500",
+    className: "btn btn-ghost px-2 text-gray-500 hover:text-gray-900",
     title: "編集"
   }, /*#__PURE__*/React.createElement("svg", {
     className: "w-5 h-5",
@@ -6823,7 +6885,7 @@ const UserRow = ({
     d: "M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"
   }))), /*#__PURE__*/React.createElement("button", {
     onClick: onDelete,
-    className: "btn btn-ghost text-red-500",
+    className: "btn btn-ghost px-2 text-gray-400 hover:text-red-600",
     title: "削除"
   }, /*#__PURE__*/React.createElement(Icons.Trash, null))));
 };
@@ -6857,7 +6919,7 @@ const AddUserForm = ({
   }, /*#__PURE__*/React.createElement("div", {
     className: "flex-1 min-w-[140px]"
   }, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-bold text-gray-600 mb-1"
+    className: "block text-sm font-medium text-gray-700 mb-1"
   }, "氏名"), /*#__PURE__*/React.createElement("input", {
     className: "input-field",
     value: name,
@@ -6866,7 +6928,7 @@ const AddUserForm = ({
   })), /*#__PURE__*/React.createElement("div", {
     className: "flex-1 min-w-[140px]"
   }, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-bold text-gray-600 mb-1"
+    className: "block text-sm font-medium text-gray-700 mb-1"
   }, "ふりがな"), /*#__PURE__*/React.createElement("input", {
     className: "input-field",
     value: furigana,
@@ -6875,7 +6937,7 @@ const AddUserForm = ({
   })), /*#__PURE__*/React.createElement("div", {
     className: "flex-1 min-w-[140px]"
   }, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-bold text-gray-600 mb-1"
+    className: "block text-sm font-medium text-gray-700 mb-1"
   }, "受給者証番号"), /*#__PURE__*/React.createElement("input", {
     className: "input-field",
     value: number,
@@ -6907,15 +6969,15 @@ const MonthlyExportPanel = ({
     }
   };
   return /*#__PURE__*/React.createElement("div", {
-    className: "glass p-6 rounded-xl border-l-4 border-green-500"
+    className: "glass p-6 rounded-xl"
   }, /*#__PURE__*/React.createElement("h3", {
-    className: "font-bold text-green-700 mb-4 flex items-center gap-2"
-  }, "📋 1ヶ月分の帳票様式Excel出力"), /*#__PURE__*/React.createElement("div", {
+    className: "section-title mb-4"
+  }, "1ヶ月分の帳票様式Excel出力"), /*#__PURE__*/React.createElement("div", {
     className: "flex gap-4 items-end flex-wrap"
   }, /*#__PURE__*/React.createElement("div", {
     className: "flex-1 min-w-[160px]"
   }, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-bold text-gray-600 mb-1"
+    className: "block text-sm font-medium text-gray-700 mb-1"
   }, "利用者"), /*#__PURE__*/React.createElement("select", {
     className: "input-field",
     value: expUserId,
@@ -6951,7 +7013,7 @@ const MonthlyExportPanel = ({
       }
       onExport(expUserId, expYear, expMonth);
     },
-    className: "btn btn-primary h-11 px-6 shadow-lg transform hover:-translate-y-1"
+    className: "btn btn-primary h-11 px-6"
   }, /*#__PURE__*/React.createElement("svg", {
     className: "w-5 h-5",
     viewBox: "0 0 24 24",
@@ -6969,7 +7031,7 @@ const MonthlyExportPanel = ({
     y2: "3"
   })), "帳票様式で出力")), /*#__PURE__*/React.createElement("div", {
     style: {
-      borderTop: '1px dashed #d1d5db',
+      borderTop: '1px solid #f3f4f6',
       marginTop: '1rem',
       paddingTop: '1rem'
     }
@@ -6980,21 +7042,14 @@ const MonthlyExportPanel = ({
       flex: 1
     }
   }, /*#__PURE__*/React.createElement("p", {
-    className: "text-sm text-gray-600 font-bold"
-  }, "📦 全利用者一括ダウンロード"), /*#__PURE__*/React.createElement("p", {
+    className: "text-sm text-gray-900 font-medium"
+  }, "全利用者一括ダウンロード"), /*#__PURE__*/React.createElement("p", {
     className: "text-xs text-gray-400"
   }, "上で選択した年月の全利用者データをZIPでまとめてダウンロードします。")), /*#__PURE__*/React.createElement("button", {
     onClick: handleBulkExport,
     disabled: bulkLoading,
-    className: "btn h-11 px-6 shadow-lg transform hover:-translate-y-1",
-    style: {
-      background: bulkLoading ? '#cbd5e1' : 'linear-gradient(135deg, #f59e0b, #d97706)',
-      color: 'white',
-      border: 'none',
-      cursor: bulkLoading ? 'not-allowed' : 'pointer',
-      fontWeight: 700
-    }
-  }, bulkLoading ? /*#__PURE__*/React.createElement("span", null, "⏳ 作成中...") : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("svg", {
+    className: "btn btn-outline h-11 px-6"
+  }, bulkLoading ? /*#__PURE__*/React.createElement("span", null, "作成中...") : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("svg", {
     className: "w-5 h-5",
     viewBox: "0 0 24 24",
     fill: "none",

@@ -9,7 +9,7 @@
     <meta http-equiv="Expires" content="0">
     <title>在宅書類自動作成 (v2.5.2)</title>
     <link rel="icon" type="image/svg+xml"
-        href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23111827'/%3E%3Cpath d='M18 8h-7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V13z' fill='none' stroke='white' stroke-width='1.6' stroke-linejoin='round'/%3E%3Cpath d='M18 8v5h5M12.5 17h7M12.5 20.5h4.5' fill='none' stroke='white' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E" />
+        href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='sg' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0%25' stop-color='%236366f1'/%3E%3Cstop offset='100%25' stop-color='%2338bdf8'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='8' fill='url(%23sg)'/%3E%3Cpath d='M18 8h-7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V13z' fill='none' stroke='white' stroke-width='1.6' stroke-linejoin='round'/%3E%3Cpath d='M18 8v5h5M12.5 17h7M12.5 20.5h4.5' fill='none' stroke='white' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E" />
 
     <!-- スタイル・ライブラリ読み込み -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -46,31 +46,36 @@
 
     <style>
         :root {
-            --ink: #111827;
-            --ink-2: #374151;
-            --muted: #6b7280;
-            --line: #e5e7eb;
-            --line-strong: #d1d5db;
-            --bg: #f6f7f9;
+            --ink: #2d3748;
+            --ink-2: #4a5568;
+            --muted: #718096;
+            --line: #edf2f7;
+            --line-strong: #e2e8f0;
+            --bg: #f8fafc;
+            --primary: #4f46e5;
+            --primary-hover: #4338ca;
+            --primary-light: #eef2ff;
         }
 
         body {
             font-family: 'Noto Sans JP', system-ui, -apple-system, 'Segoe UI', sans-serif;
-            background-color: var(--bg);
+            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
             color: var(--ink);
             -webkit-font-smoothing: antialiased;
             -moz-osx-font-smoothing: grayscale;
-            letter-spacing: 0.02em;
+            letter-spacing: 0.01em;
+            min-height: 100vh;
         }
 
         ::selection {
-            background: #e5e7eb;
+            background: #e0e7ff;
+            color: #3730a3;
         }
 
         /* スクロールバー */
         ::-webkit-scrollbar {
-            width: 10px;
-            height: 10px;
+            width: 8px;
+            height: 8px;
         }
 
         ::-webkit-scrollbar-track {
@@ -78,61 +83,65 @@
         }
 
         ::-webkit-scrollbar-thumb {
-            background: #d1d5db;
+            background: #cbd5e1;
             border-radius: 9999px;
-            border: 3px solid transparent;
-            background-clip: padding-box;
         }
 
         ::-webkit-scrollbar-thumb:hover {
-            background: #9ca3af;
-            border: 3px solid transparent;
-            background-clip: padding-box;
+            background: #94a3b8;
         }
 
-        /* カード */
+        /* 柔らかいカードスタイル */
         .glass {
             background: #ffffff;
-            border: 1px solid var(--line);
-            box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+            border: 1px solid #e2e8f0;
+            border-radius: 1rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px -2px rgba(0, 0, 0, 0.02);
+            transition: box-shadow 0.2s ease, border-color 0.2s ease;
+        }
+        
+        .glass:hover {
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.04), 0 4px 6px -4px rgba(0, 0, 0, 0.02);
         }
 
-        /* 入力 */
+        /* 入力フィールド */
         .input-field {
             width: 100%;
-            padding: 0.625rem 0.75rem;
-            border: 1px solid var(--line-strong);
-            border-radius: 0.5rem;
-            background-color: #ffffff;
-            color: var(--ink);
+            padding: 0.65rem 0.85rem;
+            border: 1px solid #e2e8f0;
+            border-radius: 0.625rem;
+            background-color: #f8fafc;
+            color: #334155;
             font-size: 0.875rem;
             line-height: 1.5;
-            transition: border-color 0.15s, box-shadow 0.15s;
+            transition: all 0.2s ease;
         }
 
         .input-field:hover {
-            border-color: #9ca3af;
+            border-color: #cbd5e1;
+            background-color: #ffffff;
         }
 
         .input-field:focus {
             outline: none;
-            border-color: var(--ink);
-            box-shadow: 0 0 0 3px rgba(17, 24, 39, 0.08);
+            border-color: #6366f1;
+            background-color: #ffffff;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
         }
 
         .input-field::placeholder {
-            color: #9ca3af;
+            color: #94a3b8;
         }
 
         /* ボタン */
         .btn {
-            padding: 0.5rem 1rem;
-            border-radius: 0.5rem;
+            padding: 0.6rem 1.15rem;
+            border-radius: 0.625rem;
             border: 1px solid transparent;
             font-size: 0.875rem;
             font-weight: 500;
             line-height: 1.25rem;
-            transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+            transition: all 0.2s ease;
             display: inline-flex;
             align-items: center;
             justify-content: center;
@@ -143,6 +152,7 @@
         .btn:disabled {
             opacity: 0.5;
             cursor: not-allowed;
+            transform: none !important;
         }
 
         .btn svg {
@@ -151,123 +161,152 @@
         }
 
         .btn-primary {
-            background-color: var(--ink);
+            background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
             color: #ffffff;
+            box-shadow: 0 2px 4px rgba(79, 70, 229, 0.2);
         }
 
         .btn-primary:hover:not(:disabled) {
-            background-color: #1f2937;
+            background: linear-gradient(135deg, #4338ca 0%, #4f46e5 100%);
+            box-shadow: 0 4px 8px rgba(79, 70, 229, 0.25);
+            transform: translateY(-1px);
         }
 
         .btn-secondary,
         .btn-outline {
             background-color: #ffffff;
-            color: var(--ink-2);
-            border-color: var(--line-strong);
+            color: #475569;
+            border-color: #e2e8f0;
         }
 
         .btn-secondary:hover:not(:disabled),
         .btn-outline:hover:not(:disabled) {
-            background-color: #f9fafb;
-            border-color: #9ca3af;
-            color: var(--ink);
+            background-color: #f8fafc;
+            border-color: #cbd5e1;
+            color: #1e293b;
         }
 
         .btn-danger {
-            background-color: #dc2626;
+            background: linear-gradient(135deg, #ef4444 0%, #f87171 100%);
             color: #ffffff;
+            box-shadow: 0 2px 4px rgba(239, 68, 68, 0.2);
+        }
+        
+        .btn-danger:hover:not(:disabled) {
+            background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%);
         }
 
         .btn-ghost {
             background-color: transparent;
-            color: #4b5563;
+            color: #64748b;
         }
 
         .btn-ghost:hover:not(:disabled) {
-            background-color: #f3f4f6;
+            background-color: #f1f5f9;
+            color: #1e293b;
         }
 
-        /* AIボタン */
+        /* 柔らかいAIボタン */
         .btn-ai {
             display: inline-flex;
             align-items: center;
-            gap: 0.25rem;
-            background: #ffffff;
-            color: var(--ink-2);
-            border: 1px solid var(--line-strong);
+            gap: 0.35rem;
+            background: linear-gradient(135deg, #eff6ff 0%, #e0e7ff 100%);
+            color: #4338ca;
+            border: 1px solid #c7d2fe;
             font-size: 0.75rem;
-            font-weight: 500;
-            padding: 0.25rem 0.625rem;
+            font-weight: 600;
+            padding: 0.35rem 0.75rem;
             border-radius: 9999px;
             cursor: pointer;
-            transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+            box-shadow: 0 1px 2px rgba(99, 102, 241, 0.08);
+            transition: all 0.2s ease;
         }
 
         .btn-ai svg {
             width: 0.875rem;
             height: 0.875rem;
+            color: #4f46e5;
         }
 
         .btn-ai:hover:not(:disabled) {
-            background: #f9fafb;
-            border-color: var(--ink);
-            color: var(--ink);
+            background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%);
+            border-color: #a5b4fc;
+            color: #3730a3;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(99, 102, 241, 0.15);
         }
 
         .btn-ai:disabled {
-            background: #f9fafb;
-            color: #9ca3af;
+            background: #f1f5f9;
+            border-color: #e2e8f0;
+            color: #94a3b8;
             cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
         }
 
-        /* サイドバー */
+        /* サイドバーナビ */
         .nav-item {
             width: 100%;
             display: flex;
             align-items: center;
             gap: 0.75rem;
-            padding: 0.5rem 0.75rem;
-            border-radius: 0.5rem;
+            padding: 0.65rem 0.85rem;
+            border-radius: 0.625rem;
             font-size: 0.875rem;
             font-weight: 500;
-            color: #4b5563;
-            transition: background-color 0.15s, color 0.15s;
+            color: #64748b;
+            transition: all 0.2s ease;
         }
 
         .nav-item svg {
             width: 18px;
             height: 18px;
-            color: #9ca3af;
-            transition: color 0.15s;
+            color: #94a3b8;
+            transition: color 0.2s ease;
         }
 
         .nav-item:hover {
-            background-color: #f3f4f6;
-            color: var(--ink);
+            background-color: #f1f5f9;
+            color: #1e293b;
         }
 
         .nav-item-active,
         .nav-item-active:hover {
-            background-color: #f3f4f6;
-            color: var(--ink);
+            background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%);
+            color: #4338ca;
+            font-weight: 600;
         }
 
         .nav-item-active svg {
-            color: var(--ink);
+            color: #4f46e5;
         }
 
         /* 見出し */
         .page-title {
-            font-size: 1.375rem;
-            font-weight: 600;
-            letter-spacing: 0;
-            color: var(--ink);
+            font-size: 1.35rem;
+            font-weight: 700;
+            letter-spacing: -0.01em;
+            color: #1e293b;
+            display: flex;
+            align-items: center;
+            gap: 0.65rem;
+        }
+        
+        .page-title::before {
+            content: '';
+            display: inline-block;
+            width: 4px;
+            height: 1.25rem;
+            border-radius: 9999px;
+            background: linear-gradient(to bottom, #6366f1, #3b82f6);
         }
 
         .section-title {
-            font-size: 0.9375rem;
+            font-size: 0.95rem;
             font-weight: 600;
-            color: var(--ink);
+            color: #1e293b;
             display: flex;
             align-items: center;
             gap: 0.5rem;
@@ -277,24 +316,30 @@
         .link-action {
             font-size: 0.8125rem;
             font-weight: 500;
-            color: #4b5563;
-            padding: 0.25rem 0.5rem;
+            color: #475569;
+            padding: 0.25rem 0.55rem;
             border-radius: 0.375rem;
-            transition: background-color 0.15s, color 0.15s;
+            background-color: #f8fafc;
+            border: 1px solid #e2e8f0;
+            transition: all 0.15s ease;
         }
 
         .link-action:hover {
-            background-color: #f3f4f6;
-            color: var(--ink);
+            background-color: #f1f5f9;
+            color: #1e293b;
+            border-color: #cbd5e1;
         }
 
         .link-danger {
-            color: #9ca3af;
+            color: #ef4444;
+            background-color: #fef2f2;
+            border-color: #fee2e2;
         }
 
         .link-danger:hover {
-            background-color: #fef2f2;
+            background-color: #fee2e2;
             color: #dc2626;
+            border-color: #fca5a5;
         }
 
         .loading-dots:after {
@@ -303,30 +348,14 @@
         }
 
         @keyframes dots {
-
-            0%,
-            20% {
-                content: '.';
-            }
-
-            40% {
-                content: '..';
-            }
-
-            60% {
-                content: '...';
-            }
-
-            80%,
-            100% {
-                content: '';
-            }
+            0%, 20% { content: '.'; }
+            40% { content: '..'; }
+            60% { content: '...'; }
+            80%, 100% { content: ''; }
         }
 
         @keyframes spin {
-            to {
-                transform: rotate(360deg);
-            }
+            to { transform: rotate(360deg); }
         }
 
         @keyframes fadeIn {
@@ -334,21 +363,20 @@
                 opacity: 0;
                 transform: translateY(4px);
             }
-
             to {
                 opacity: 1;
                 transform: translateY(0);
             }
         }
-    </style>
+</style>
 </head>
 
 <body>
     <div id="root">
-        <div style="min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #f6f7f9; font-family: 'Noto Sans JP', sans-serif;">
-            <div style="text-align: center;">
-                <div style="display: inline-block; width: 1.5rem; height: 1.5rem; border: 2px solid #e5e7eb; border-top-color: #111827; border-radius: 50%; animation: spin 0.8s linear infinite;"></div>
-                <p style="color: #6b7280; font-size: 0.8125rem; margin-top: 0.875rem; letter-spacing: 0.04em;">読み込み中</p>
+        <div style="min-height: 100vh; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%); font-family: 'Noto Sans JP', sans-serif;">
+            <div style="text-align: center; background: rgba(255,255,255,0.9); padding: 2rem 2.5rem; border-radius: 1rem; border: 1px solid #e2e8f0; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05);">
+                <div style="display: inline-block; width: 2rem; height: 2rem; border: 3px solid #e0e7ff; border-top-color: #6366f1; border-radius: 50%; animation: spin 0.8s linear infinite;"></div>
+                <p style="color: #475569; font-size: 0.875rem; font-weight: 500; margin-top: 1rem; letter-spacing: 0.02em;">読み込み中...</p>
                 <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
             </div>
         </div>
@@ -779,7 +807,7 @@ const LoginPage = ({
     x1: "8", y1: "17", x2: "13", y2: "17"
   })));
   return /*#__PURE__*/React.createElement("div", {
-    className: "min-h-screen bg-gray-50 flex items-center justify-center p-4"
+    className: "min-h-screen bg-gradient-to-br from-slate-50 via-indigo-50/40 to-sky-50 flex items-center justify-center p-4"
   }, /*#__PURE__*/React.createElement("div", {
     className: "w-full max-w-md"
   }, /*#__PURE__*/React.createElement("div", {
@@ -794,9 +822,9 @@ const LoginPage = ({
     className: "space-y-3 mb-6"
   }, /*#__PURE__*/React.createElement("div", {
     onClick: handleOguraKajimachiLogin,
-    className: "bg-white p-4 rounded-xl cursor-pointer border border-gray-200 hover:border-gray-900 transition-colors group flex items-center gap-4"
+    className: "bg-white/90 backdrop-blur-sm p-4 rounded-xl cursor-pointer border border-slate-200 hover:border-indigo-400 hover:shadow-md hover:shadow-indigo-50/50 transition-all group flex items-center gap-4"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "w-11 h-11 rounded-lg bg-gray-900 flex items-center justify-center text-white text-base font-semibold"
+    className: "w-11 h-11 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white text-base font-semibold shadow-sm"
   }, "鍛"), /*#__PURE__*/React.createElement("div", {
     className: "flex-1"
   }, /*#__PURE__*/React.createElement("div", {
@@ -804,11 +832,11 @@ const LoginPage = ({
   }, /*#__PURE__*/React.createElement("h3", {
     className: "text-base font-semibold text-gray-900"
   }, "小倉鍛冶町"), /*#__PURE__*/React.createElement("span", {
-    className: "text-[11px] text-gray-500 border border-gray-200 font-medium px-1.5 py-0.5 rounded"
+    className: "text-[11px] text-indigo-700 bg-indigo-50/80 border border-indigo-200/60 font-medium px-2 py-0.5 rounded-full"
   }, "既存データあり")), /*#__PURE__*/React.createElement("p", {
     className: "text-xs text-gray-400 mt-0.5"
   }, "rashikulab.kajimachi@gmail.com")), /*#__PURE__*/React.createElement("div", {
-    className: "text-gray-300 group-hover:text-gray-900 transition-colors"
+    className: "text-slate-300 group-hover:text-indigo-600 transition-colors"
   }, /*#__PURE__*/React.createElement("svg", {
     className: "w-5 h-5",
     viewBox: "0 0 24 24",
@@ -821,9 +849,9 @@ const LoginPage = ({
     points: "9 18 15 12 9 6"
   })))), /*#__PURE__*/React.createElement("div", {
     onClick: handleOguraLogin,
-    className: "bg-white p-4 rounded-xl cursor-pointer border border-gray-200 hover:border-gray-900 transition-colors group flex items-center gap-4"
+    className: "bg-white/90 backdrop-blur-sm p-4 rounded-xl cursor-pointer border border-slate-200 hover:border-indigo-400 hover:shadow-md hover:shadow-indigo-50/50 transition-all group flex items-center gap-4"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "w-11 h-11 rounded-lg bg-gray-900 flex items-center justify-center text-white text-base font-semibold"
+    className: "w-11 h-11 rounded-xl bg-gradient-to-br from-sky-500 to-indigo-500 flex items-center justify-center text-white text-base font-semibold shadow-sm"
   }, "小"), /*#__PURE__*/React.createElement("div", {
     className: "flex-1"
   }, /*#__PURE__*/React.createElement("div", {
@@ -831,11 +859,11 @@ const LoginPage = ({
   }, /*#__PURE__*/React.createElement("h3", {
     className: "text-base font-semibold text-gray-900"
   }, "小倉"), /*#__PURE__*/React.createElement("span", {
-    className: "text-[11px] text-gray-500 border border-gray-200 font-medium px-1.5 py-0.5 rounded"
+    className: "text-[11px] text-indigo-700 bg-indigo-50/80 border border-indigo-200/60 font-medium px-2 py-0.5 rounded-full"
   }, "新規（データ空）")), /*#__PURE__*/React.createElement("p", {
     className: "text-xs text-gray-400 mt-0.5"
   }, "rashikulab.kokura@gmail.com")), /*#__PURE__*/React.createElement("div", {
-    className: "text-gray-300 group-hover:text-gray-900 transition-colors"
+    className: "text-slate-300 group-hover:text-indigo-600 transition-colors"
   }, /*#__PURE__*/React.createElement("svg", {
     className: "w-5 h-5",
     viewBox: "0 0 24 24",
@@ -5503,7 +5531,7 @@ ${baseContext}
       width: '2rem',
       height: '2rem',
       border: '3px solid #e5e7eb',
-      borderTop: '3px solid #111827',
+      borderTop: '3px solid #6366f1',
       borderRadius: '50%',
       animation: 'spin 1s linear infinite'
     }
@@ -5541,27 +5569,28 @@ ${baseContext}
       padding: '0.75rem',
       borderRadius: '0.5rem',
       border: 'none',
-      background: '#111827',
+      background: 'linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)',
       color: 'white',
       fontWeight: 500,
       cursor: 'pointer',
       fontSize: '0.95rem',
+      boxShadow: '0 2px 6px rgba(79, 70, 229, 0.25)',
       transition: 'all 0.2s'
     },
     onMouseOver: e => {
-      e.target.style.background = '#1f2937';
+      e.target.style.background = '#4338ca';
     },
     onMouseOut: e => {
-      e.target.style.background = '#111827';
+      e.target.style.background = '#4f46e5';
     }
   }, "自動作成する")))), /*#__PURE__*/React.createElement("div", {
-    className: "w-60 bg-white border-r border-gray-200 flex flex-col z-10"
+    className: "w-64 bg-white/90 backdrop-blur-sm border-r border-slate-200/80 flex flex-col z-10"
   }, /*#__PURE__*/React.createElement("div", {
     className: "h-16 px-5 border-b border-gray-100 flex items-center gap-3"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "w-8 h-8 rounded-lg bg-gray-900 flex items-center justify-center flex-shrink-0"
+    className: "w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-500 to-sky-400 flex items-center justify-center flex-shrink-0 shadow-sm shadow-indigo-200"
   }, /*#__PURE__*/React.createElement("svg", {
-    className: "w-4 h-4",
+    className: "w-5 h-5",
     viewBox: "0 0 24 24",
     fill: "none",
     stroke: "white",
@@ -5577,7 +5606,7 @@ ${baseContext}
   }), /*#__PURE__*/React.createElement("line", {
     x1: "8", y1: "17", x2: "13", y2: "17"
   }))), /*#__PURE__*/React.createElement("h1", {
-    className: "font-semibold text-[15px] text-gray-900"
+    className: "font-bold text-[15px] text-slate-800"
   }, "在宅書類自動作成")), /*#__PURE__*/React.createElement("nav", {
     className: "flex-1 p-3 space-y-0.5"
   }, /*#__PURE__*/React.createElement("button", {
@@ -5600,7 +5629,7 @@ ${baseContext}
   }, /*#__PURE__*/React.createElement("div", {
     className: "flex items-center gap-2.5 px-2 py-2"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "w-8 h-8 rounded-md bg-gray-100 border border-gray-200 flex items-center justify-center text-gray-700 text-xs font-semibold flex-shrink-0"
+    className: "w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-50 to-sky-100 border border-indigo-200/60 flex items-center justify-center text-indigo-700 text-xs font-semibold flex-shrink-0"
   }, accountName ? accountName.charAt(0) : /*#__PURE__*/React.createElement(Icons.User, null)), /*#__PURE__*/React.createElement("div", {
     className: "flex-1 min-w-0"
   }, /*#__PURE__*/React.createElement("div", {
@@ -5611,7 +5640,7 @@ ${baseContext}
     onClick: onLogout,
     className: "nav-item"
   }, /*#__PURE__*/React.createElement(Icons.LogOut, null), "アカウント選択に戻る"))), /*#__PURE__*/React.createElement("main", {
-    className: "flex-1 overflow-y-auto bg-gray-50 px-10 py-10"
+    className: "flex-1 overflow-y-auto bg-slate-50/60 px-8 py-8"
   }, view === 'input' && /*#__PURE__*/React.createElement("div", {
     className: "max-w-4xl mx-auto space-y-6"
   }, /*#__PURE__*/React.createElement("h2", {
@@ -5623,7 +5652,7 @@ ${baseContext}
   }, /*#__PURE__*/React.createElement("div", {
     className: "glass p-5 rounded-xl"
   }, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-medium text-gray-700 mb-1"
+    className: "block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider"
   }, "利用者 ", /*#__PURE__*/React.createElement("span", {
     className: "text-red-500"
   }, "*")), /*#__PURE__*/React.createElement("select", {
@@ -5638,14 +5667,14 @@ ${baseContext}
   }, u.name)))), /*#__PURE__*/React.createElement("div", {
     className: "glass p-5 rounded-xl space-y-4"
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-medium text-gray-700 mb-1"
+    className: "block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider"
   }, "実施日"), /*#__PURE__*/React.createElement("input", {
     type: "date",
     value: formData.implementationDate,
     onChange: e => handleDateChange(e.target.value),
     className: "input-field"
   })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-medium text-gray-700 mb-1"
+    className: "block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider"
   }, "前回実施日 (自動/手動)"), /*#__PURE__*/React.createElement("input", {
     type: "date",
     value: formData.previousDate,
@@ -5655,14 +5684,14 @@ ${baseContext}
     }),
     className: "input-field"
   })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-medium text-gray-700 mb-1"
+    className: "block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider"
   }, "対象期間 (自動)"), /*#__PURE__*/React.createElement("div", {
     className: "flex items-center gap-1"
   }, /*#__PURE__*/React.createElement("input", {
     type: "date",
     value: formData.periodStart,
     readOnly: true,
-    className: "input-field bg-gray-100 text-gray-500 text-xs",
+    className: "input-field bg-slate-100/70 text-slate-600 text-xs border-slate-200",
     style: {
       minWidth: 0,
       flex: 1,
@@ -5674,7 +5703,7 @@ ${baseContext}
     type: "date",
     value: formData.periodEnd,
     readOnly: true,
-    className: "input-field bg-gray-100 text-gray-500 text-xs",
+    className: "input-field bg-slate-100/70 text-slate-600 text-xs border-slate-200",
     style: {
       minWidth: 0,
       flex: 1,
@@ -5683,12 +5712,12 @@ ${baseContext}
   })))), /*#__PURE__*/React.createElement("div", {
     className: "glass p-5 rounded-xl space-y-4"
   }, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-medium text-gray-700 mb-2"
+    className: "block text-xs font-semibold text-slate-600 mb-2 uppercase tracking-wider"
   }, "実施方法"), /*#__PURE__*/React.createElement("div", {
     className: "grid grid-cols-2 gap-2"
   }, ['commute', 'visit', 'phone', 'line', 'discord', 'googleForm'].map(key => /*#__PURE__*/React.createElement("label", {
     key: key,
-    className: `cursor-pointer p-2 rounded-lg border text-center text-sm transition ${formData.selectedMethod === key ? 'bg-gray-900 border-gray-900 text-white' : 'bg-white border-gray-200 text-gray-600 hover:border-gray-400'}`
+    className: `cursor-pointer p-2 rounded-lg border text-center text-sm transition ${formData.selectedMethod === key ? 'bg-indigo-600 border-indigo-600 text-white font-medium shadow-sm shadow-indigo-100' : 'bg-white border-slate-200 text-slate-600 hover:border-indigo-300 hover:bg-slate-50/80'}`
   }, /*#__PURE__*/React.createElement("input", {
     type: "radio",
     name: "method",
@@ -5705,7 +5734,7 @@ ${baseContext}
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     className: "flex justify-between items-center mb-1"
   }, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-medium text-gray-700"
+    className: "block text-xs font-semibold text-slate-600 uppercase tracking-wider"
   }, "体調について"), /*#__PURE__*/React.createElement("button", {
     onClick: () => generateSingleContent('condition'),
     disabled: loadingState.condition,
@@ -5723,7 +5752,7 @@ ${baseContext}
   })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     className: "flex justify-between items-center mb-1"
   }, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-medium text-gray-700"
+    className: "block text-xs font-semibold text-slate-600 uppercase tracking-wider"
   }, "在宅での作業内容について"), /*#__PURE__*/React.createElement("button", {
     onClick: () => generateSingleContent('workContent'),
     disabled: loadingState.workContent,
@@ -5741,7 +5770,7 @@ ${baseContext}
   })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     className: "flex justify-between items-center mb-1"
   }, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-medium text-gray-700"
+    className: "block text-xs font-semibold text-slate-600 uppercase tracking-wider"
   }, "今後の目標"), /*#__PURE__*/React.createElement("button", {
     onClick: () => generateSingleContent('goals'),
     disabled: loadingState.goals,
@@ -5763,7 +5792,7 @@ ${baseContext}
   }, /*#__PURE__*/React.createElement("div", {
     className: "flex-1"
   }, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-medium text-gray-700 mb-1"
+    className: "block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider"
   }, "記録者 ", /*#__PURE__*/React.createElement("span", {
     className: "text-red-500"
   }, "*")), /*#__PURE__*/React.createElement("select", {
@@ -5783,7 +5812,7 @@ ${baseContext}
   }, name)))), /*#__PURE__*/React.createElement("div", {
     className: "flex-1"
   }, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-medium text-gray-700 mb-1"
+    className: "block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider"
   }, "確認者"), /*#__PURE__*/React.createElement("select", {
     className: "input-field bg-white",
     value: formData.manager,
@@ -5866,16 +5895,16 @@ ${baseContext}
   }, "過去の記録がある全利用者について、前回の記録をもとにAIが言い回しを変えた新しい週評価を一括作成します。"), /*#__PURE__*/React.createElement("div", {
     className: "flex gap-4 items-end flex-wrap"
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-medium text-gray-700 mb-1"
+    className: "block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider"
   }, "実施日"), /*#__PURE__*/React.createElement("input", {
     type: "date",
     className: "input-field",
     value: autoCreateTargetDate,
     onChange: e => setAutoCreateTargetDate(e.target.value)
   })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-medium text-gray-700 mb-1"
+    className: "block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider"
   }, "対象期間 (自動計算)"), /*#__PURE__*/React.createElement("div", {
-    className: "input-field bg-gray-100 text-gray-500 text-sm"
+    className: "input-field bg-slate-100/70 text-slate-600 text-sm border-slate-200"
   }, (() => {
     if (!autoCreateTargetDate) return '—';
     const implDateObj = new Date(autoCreateTargetDate);
@@ -5964,12 +5993,12 @@ ${baseContext}
   }))), records.length === 0 && /*#__PURE__*/React.createElement("p", {
     className: "text-center text-gray-400 py-10"
   }, "記録がありません")), showIndividualWeeklyModal && /*#__PURE__*/React.createElement("div", {
-    className: "fixed inset-0 bg-gray-900/40 flex items-center justify-center z-50 p-4",
+    className: "fixed inset-0 bg-slate-900/30 backdrop-blur-sm flex items-center justify-center z-50 p-4",
     onClick: e => {
       if (e.target === e.currentTarget) setShowIndividualWeeklyModal(false);
     }
   }, /*#__PURE__*/React.createElement("div", {
-    className: "bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto",
+    className: "bg-white rounded-2xl shadow-2xl border border-slate-100 w-full max-w-3xl max-h-[90vh] overflow-y-auto",
     style: {
       animation: 'fadeIn 0.2s ease-out'
     }
@@ -5983,7 +6012,7 @@ ${baseContext}
   }, "×")), /*#__PURE__*/React.createElement("div", {
     className: "p-6 space-y-5"
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-medium text-gray-700 mb-1"
+    className: "block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider"
   }, "利用者 ", /*#__PURE__*/React.createElement("span", {
     className: "text-red-500"
   }, "*")), /*#__PURE__*/React.createElement("select", {
@@ -6033,14 +6062,14 @@ ${baseContext}
   }, u.name)))), /*#__PURE__*/React.createElement("div", {
     className: "grid grid-cols-1 md:grid-cols-3 gap-4"
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-medium text-gray-700 mb-1"
+    className: "block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider"
   }, "実施日"), /*#__PURE__*/React.createElement("input", {
     type: "date",
     className: "input-field",
     value: individualWeeklyData.implementationDate,
     onChange: e => handleIndividualWeeklyDateChange(e.target.value)
   })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-medium text-gray-700 mb-1"
+    className: "block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider"
   }, "前回実施日"), /*#__PURE__*/React.createElement("input", {
     type: "date",
     className: "input-field",
@@ -6050,16 +6079,16 @@ ${baseContext}
       previousDate: e.target.value
     }))
   })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-medium text-gray-700 mb-1"
+    className: "block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider"
   }, "対象期間"), /*#__PURE__*/React.createElement("div", {
-    className: "input-field bg-gray-100 text-gray-500 text-sm"
+    className: "input-field bg-slate-100/70 text-slate-600 text-sm border-slate-200"
   }, individualWeeklyData.periodStart && individualWeeklyData.periodEnd ? `${getFormattedDate(individualWeeklyData.periodStart)} ～ ${getFormattedDate(individualWeeklyData.periodEnd)}` : '利用者と日付を選択'))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-medium text-gray-700 mb-2"
+    className: "block text-xs font-semibold text-slate-600 mb-2 uppercase tracking-wider"
   }, "実施方法"), /*#__PURE__*/React.createElement("div", {
     className: "flex flex-wrap gap-2"
   }, ['commute', 'visit', 'phone', 'line', 'discord', 'googleForm'].map(key => /*#__PURE__*/React.createElement("label", {
     key: key,
-    className: `cursor-pointer px-3 py-1.5 rounded-lg border text-sm transition ${individualWeeklyData.selectedMethod === key ? 'bg-gray-900 border-gray-900 text-white' : 'bg-white border-gray-200 text-gray-600 hover:border-gray-400'}`
+    className: `cursor-pointer px-3 py-1.5 rounded-lg border text-sm transition ${individualWeeklyData.selectedMethod === key ? 'bg-indigo-600 border-indigo-600 text-white font-medium shadow-sm shadow-indigo-100' : 'bg-white border-slate-200 text-slate-600 hover:border-indigo-300 hover:bg-slate-50/80'}`
   }, /*#__PURE__*/React.createElement("input", {
     type: "radio",
     name: "indWeeklyMethod",
@@ -6086,7 +6115,7 @@ ${baseContext}
   }, /*#__PURE__*/React.createElement("div", {
     className: "flex justify-between items-center mb-1"
   }, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-medium text-gray-700"
+    className: "block text-xs font-semibold text-slate-600 uppercase tracking-wider"
   }, field.label), /*#__PURE__*/React.createElement("button", {
     onClick: () => generateIndividualWeeklyContent(field.key),
     disabled: individualWeeklyLoading[field.key],
@@ -6105,7 +6134,7 @@ ${baseContext}
   }))), /*#__PURE__*/React.createElement("div", {
     className: "grid grid-cols-1 md:grid-cols-2 gap-4"
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-medium text-gray-700 mb-1"
+    className: "block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider"
   }, "記録者 ", /*#__PURE__*/React.createElement("span", {
     className: "text-red-500"
   }, "*")), /*#__PURE__*/React.createElement("input", {
@@ -6124,7 +6153,7 @@ ${baseContext}
     key: name,
     value: name
   })))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-medium text-gray-700 mb-1"
+    className: "block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider"
   }, "確認者（管理責任者）"), /*#__PURE__*/React.createElement("input", {
     type: "text",
     className: "input-field",
@@ -6148,12 +6177,12 @@ ${baseContext}
     onClick: saveIndividualWeeklyRecord,
     className: "btn btn-primary px-6 py-2"
   }, "保存する")))), showIndividualMonthlyModal && /*#__PURE__*/React.createElement("div", {
-    className: "fixed inset-0 bg-gray-900/40 flex items-center justify-center z-50 p-4",
+    className: "fixed inset-0 bg-slate-900/30 backdrop-blur-sm flex items-center justify-center z-50 p-4",
     onClick: e => {
       if (e.target === e.currentTarget) setShowIndividualMonthlyModal(false);
     }
   }, /*#__PURE__*/React.createElement("div", {
-    className: "bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto",
+    className: "bg-white rounded-2xl shadow-2xl border border-slate-100 w-full max-w-3xl max-h-[90vh] overflow-y-auto",
     style: {
       animation: 'fadeIn 0.2s ease-out'
     }
@@ -6169,7 +6198,7 @@ ${baseContext}
   }, /*#__PURE__*/React.createElement("div", {
     className: "grid grid-cols-1 md:grid-cols-2 gap-4"
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-medium text-gray-700 mb-1"
+    className: "block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider"
   }, "利用者 ", /*#__PURE__*/React.createElement("span", {
     className: "text-red-500"
   }, "*")), /*#__PURE__*/React.createElement("select", {
@@ -6185,7 +6214,7 @@ ${baseContext}
     key: u.id,
     value: u.id
   }, u.name)))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-medium text-gray-700 mb-1"
+    className: "block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider"
   }, "対象年月"), /*#__PURE__*/React.createElement("div", {
     className: "flex gap-2"
   }, /*#__PURE__*/React.createElement("select", {
@@ -6211,7 +6240,7 @@ ${baseContext}
   }, i + 1, "月")))))), /*#__PURE__*/React.createElement("div", {
     className: "grid grid-cols-1 md:grid-cols-3 gap-4"
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-medium text-gray-700 mb-1"
+    className: "block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider"
   }, "実施日"), /*#__PURE__*/React.createElement("input", {
     type: "date",
     className: "input-field",
@@ -6221,7 +6250,7 @@ ${baseContext}
       implementationDate: e.target.value
     }))
   })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-medium text-gray-700 mb-1"
+    className: "block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider"
   }, "開始時間"), /*#__PURE__*/React.createElement("input", {
     type: "time",
     className: "input-field",
@@ -6231,7 +6260,7 @@ ${baseContext}
       timeStart: e.target.value
     }))
   })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-medium text-gray-700 mb-1"
+    className: "block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider"
   }, "終了時間"), /*#__PURE__*/React.createElement("input", {
     type: "time",
     className: "input-field",
@@ -6241,7 +6270,7 @@ ${baseContext}
       timeEnd: e.target.value
     }))
   }))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-medium text-gray-700 mb-2"
+    className: "block text-xs font-semibold text-slate-600 mb-2 uppercase tracking-wider"
   }, "実施方法"), /*#__PURE__*/React.createElement("div", {
     className: "flex flex-wrap gap-2"
   }, [{
@@ -6267,7 +6296,7 @@ ${baseContext}
     label: 'その他'
   }].map(m => /*#__PURE__*/React.createElement("label", {
     key: m.key,
-    className: `flex items-center gap-1.5 px-3 py-1.5 rounded-lg cursor-pointer border transition text-sm ${individualMonthlyData.method === m.key ? 'bg-gray-900 border-gray-900 text-white' : 'bg-white border-gray-200 text-gray-600 hover:border-gray-400'}`
+    className: `flex items-center gap-1.5 px-3 py-1.5 rounded-lg cursor-pointer border transition text-sm ${individualMonthlyData.method === m.key ? 'bg-indigo-600 border-indigo-600 text-white font-medium shadow-sm shadow-indigo-100' : 'bg-white border-slate-200 text-slate-600 hover:border-indigo-300 hover:bg-slate-50/80'}`
   }, /*#__PURE__*/React.createElement("input", {
     type: "radio",
     name: "indMonthlyMethod",
@@ -6279,7 +6308,7 @@ ${baseContext}
     })),
     className: "hidden"
   }), m.label)))), /*#__PURE__*/React.createElement("div", {
-    className: "bg-gray-50 rounded-lg p-4 border border-gray-200"
+    className: "bg-gradient-to-r from-indigo-50/80 to-sky-50/80 rounded-xl p-4 border border-indigo-100"
   }, /*#__PURE__*/React.createElement("div", {
     className: "flex items-center justify-between"
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("p", {
@@ -6327,7 +6356,7 @@ ${baseContext}
   }].map(field => /*#__PURE__*/React.createElement("div", {
     key: field.key
   }, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-medium text-gray-700 mb-1"
+    className: "block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider"
   }, field.label), /*#__PURE__*/React.createElement("textarea", {
     className: "input-field resize-y",
     rows: field.rows,
@@ -6339,7 +6368,7 @@ ${baseContext}
   }))), /*#__PURE__*/React.createElement("div", {
     className: "grid grid-cols-1 md:grid-cols-2 gap-4"
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-medium text-gray-700 mb-1"
+    className: "block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider"
   }, "評価実施者"), /*#__PURE__*/React.createElement("input", {
     type: "text",
     className: "input-field",
@@ -6349,7 +6378,7 @@ ${baseContext}
       evaluator: e.target.value
     }))
   })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-medium text-gray-700 mb-1"
+    className: "block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider"
   }, "前回の達成度評価日"), /*#__PURE__*/React.createElement("input", {
     type: "date",
     className: "input-field",
@@ -6375,7 +6404,7 @@ ${baseContext}
   }, /*#__PURE__*/React.createElement("div", {
     className: "grid grid-cols-1 md:grid-cols-2 gap-4"
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-medium text-gray-700 mb-1"
+    className: "block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider"
   }, "対象年月"), /*#__PURE__*/React.createElement("div", {
     className: "flex gap-2"
   }, /*#__PURE__*/React.createElement("select", {
@@ -6409,7 +6438,7 @@ ${baseContext}
   }, "選択中の対象年月（", monthlyFormData.targetYear, "年", monthlyFormData.targetMonth, "月）について、 週評価データが存在する全利用者の達成度評価を一括で自動作成します。", /*#__PURE__*/React.createElement("br", null), "※作業時間Excelファイルを添付すると、各利用者の「15日以降の施設外就労（来所）日」を自動検出して実施日に設定します（添付なしの場合は15日）。"), /*#__PURE__*/React.createElement("div", {
     className: "mb-4"
   }, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-medium text-gray-700 mb-1"
+    className: "block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider"
   }, "作業時間エクセルデータ (任意)"), /*#__PURE__*/React.createElement("div", {
     className: "flex items-center gap-2"
   }, /*#__PURE__*/React.createElement("input", {
@@ -6524,12 +6553,12 @@ ${baseContext}
       className: "text-xs text-gray-400 mt-3"
     }, "※ 各行の「印刷」で個別印刷、「Excel」で個別ダウンロード、右上の「一括印刷」で全員分をまとめて印刷できます。"));
   })(), editingMonthlyEvalId && editMonthlyEvalData && /*#__PURE__*/React.createElement("div", {
-    className: "fixed inset-0 bg-gray-900/40 flex items-center justify-center z-50 p-4",
+    className: "fixed inset-0 bg-slate-900/30 backdrop-blur-sm flex items-center justify-center z-50 p-4",
     onClick: e => {
       if (e.target === e.currentTarget) cancelEditMonthlyEval();
     }
   }, /*#__PURE__*/React.createElement("div", {
-    className: "bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto",
+    className: "bg-white rounded-2xl shadow-2xl border border-slate-100 w-full max-w-3xl max-h-[90vh] overflow-y-auto",
     style: {
       animation: 'fadeIn 0.2s ease-out'
     }
@@ -6550,28 +6579,28 @@ ${baseContext}
   }, /*#__PURE__*/React.createElement("div", {
     className: "grid grid-cols-1 md:grid-cols-3 gap-4"
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-medium text-gray-700 mb-1"
+    className: "block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider"
   }, "実施日"), /*#__PURE__*/React.createElement("input", {
     type: "date",
     className: "input-field",
     value: editMonthlyEvalData.implementationDate || '',
     onChange: e => updateEditField('implementationDate', e.target.value)
   })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-medium text-gray-700 mb-1"
+    className: "block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider"
   }, "開始時間"), /*#__PURE__*/React.createElement("input", {
     type: "time",
     className: "input-field",
     value: editMonthlyEvalData.timeStart || '',
     onChange: e => updateEditField('timeStart', e.target.value)
   })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-medium text-gray-700 mb-1"
+    className: "block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider"
   }, "終了時間"), /*#__PURE__*/React.createElement("input", {
     type: "time",
     className: "input-field",
     value: editMonthlyEvalData.timeEnd || '',
     onChange: e => updateEditField('timeEnd', e.target.value)
   }))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-medium text-gray-700 mb-1"
+    className: "block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider"
   }, "実施方法"), /*#__PURE__*/React.createElement("div", {
     className: "flex flex-wrap gap-3"
   }, [{
@@ -6597,7 +6626,7 @@ ${baseContext}
     label: 'その他'
   }].map(m => /*#__PURE__*/React.createElement("label", {
     key: m.key,
-    className: `flex items-center gap-1.5 px-3 py-1.5 rounded-lg cursor-pointer border transition text-sm ${editMonthlyEvalData.method === m.key ? 'bg-gray-900 border-gray-900 text-white' : 'bg-white border-gray-200 text-gray-600 hover:border-gray-400'}`
+    className: `flex items-center gap-1.5 px-3 py-1.5 rounded-lg cursor-pointer border transition text-sm ${editMonthlyEvalData.method === m.key ? 'bg-indigo-600 border-indigo-600 text-white font-medium shadow-sm shadow-indigo-100' : 'bg-white border-slate-200 text-slate-600 hover:border-indigo-300 hover:bg-slate-50/80'}`
   }, /*#__PURE__*/React.createElement("input", {
     type: "radio",
     name: "editMethod",
@@ -6640,7 +6669,7 @@ ${baseContext}
   }].map(field => /*#__PURE__*/React.createElement("div", {
     key: field.key
   }, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-medium text-gray-700 mb-1"
+    className: "block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider"
   }, field.label), /*#__PURE__*/React.createElement("textarea", {
     className: "input-field resize-y",
     rows: field.rows,
@@ -6649,14 +6678,14 @@ ${baseContext}
   }))), /*#__PURE__*/React.createElement("div", {
     className: "grid grid-cols-1 md:grid-cols-2 gap-4"
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-medium text-gray-700 mb-1"
+    className: "block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider"
   }, "評価実施者"), /*#__PURE__*/React.createElement("input", {
     type: "text",
     className: "input-field",
     value: editMonthlyEvalData.evaluator || '',
     onChange: e => updateEditField('evaluator', e.target.value)
   })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-medium text-gray-700 mb-1"
+    className: "block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider"
   }, "前回の達成度評価日"), /*#__PURE__*/React.createElement("input", {
     type: "date",
     className: "input-field",
@@ -6690,7 +6719,7 @@ ${baseContext}
   }, /*#__PURE__*/React.createElement("div", {
     className: "flex-1"
   }, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-medium text-gray-700 mb-1"
+    className: "block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider"
   }, "APIキー"), /*#__PURE__*/React.createElement("input", {
     type: "password",
     className: "input-field",
@@ -6746,25 +6775,25 @@ ${baseContext}
   }, "データ状態"), /*#__PURE__*/React.createElement("div", {
     className: "grid grid-cols-2 md:grid-cols-4 gap-3 text-center mt-1"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "bg-gray-50 border border-gray-100 p-4 rounded-lg"
+    className: "bg-white p-4 rounded-xl border border-slate-100 shadow-sm"
   }, /*#__PURE__*/React.createElement("div", {
     className: "text-2xl font-semibold text-gray-900"
   }, users.length), /*#__PURE__*/React.createElement("div", {
     className: "text-xs text-gray-500 mt-1"
   }, "登録利用者")), /*#__PURE__*/React.createElement("div", {
-    className: "bg-gray-50 border border-gray-100 p-4 rounded-lg"
+    className: "bg-white p-4 rounded-xl border border-slate-100 shadow-sm"
   }, /*#__PURE__*/React.createElement("div", {
     className: "text-2xl font-semibold text-gray-900"
   }, records.length), /*#__PURE__*/React.createElement("div", {
     className: "text-xs text-gray-500 mt-1"
   }, "週評価記録")), /*#__PURE__*/React.createElement("div", {
-    className: "bg-gray-50 border border-gray-100 p-4 rounded-lg"
+    className: "bg-white p-4 rounded-xl border border-slate-100 shadow-sm"
   }, /*#__PURE__*/React.createElement("div", {
     className: "text-2xl font-semibold text-gray-900"
   }, savedMonthlyEvals.length), /*#__PURE__*/React.createElement("div", {
     className: "text-xs text-gray-500 mt-1"
   }, "達成度評価")), /*#__PURE__*/React.createElement("div", {
-    className: "bg-gray-50 border border-gray-100 p-4 rounded-lg"
+    className: "bg-white p-4 rounded-xl border border-slate-100 shadow-sm"
   }, /*#__PURE__*/React.createElement("div", {
     className: "text-2xl font-semibold text-gray-900"
   }, supabaseStatus === 'connected' ? '接続' : supabaseStatus === 'local' ? 'ローカル' : 'エラー'), /*#__PURE__*/React.createElement("div", {
@@ -6919,7 +6948,7 @@ const AddUserForm = ({
   }, /*#__PURE__*/React.createElement("div", {
     className: "flex-1 min-w-[140px]"
   }, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-medium text-gray-700 mb-1"
+    className: "block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider"
   }, "氏名"), /*#__PURE__*/React.createElement("input", {
     className: "input-field",
     value: name,
@@ -6928,7 +6957,7 @@ const AddUserForm = ({
   })), /*#__PURE__*/React.createElement("div", {
     className: "flex-1 min-w-[140px]"
   }, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-medium text-gray-700 mb-1"
+    className: "block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider"
   }, "ふりがな"), /*#__PURE__*/React.createElement("input", {
     className: "input-field",
     value: furigana,
@@ -6937,7 +6966,7 @@ const AddUserForm = ({
   })), /*#__PURE__*/React.createElement("div", {
     className: "flex-1 min-w-[140px]"
   }, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-medium text-gray-700 mb-1"
+    className: "block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider"
   }, "受給者証番号"), /*#__PURE__*/React.createElement("input", {
     className: "input-field",
     value: number,
@@ -6977,7 +7006,7 @@ const MonthlyExportPanel = ({
   }, /*#__PURE__*/React.createElement("div", {
     className: "flex-1 min-w-[160px]"
   }, /*#__PURE__*/React.createElement("label", {
-    className: "block text-sm font-medium text-gray-700 mb-1"
+    className: "block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider"
   }, "利用者"), /*#__PURE__*/React.createElement("select", {
     className: "input-field",
     value: expUserId,

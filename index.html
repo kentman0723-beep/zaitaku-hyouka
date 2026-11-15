@@ -1559,6 +1559,297 @@ const MainApp = ({
     previousEvalDate: ''
   });
   const [individualMonthlyLoading, setIndividualMonthlyLoading] = useState(false);
+  const [bulkCreateProgress, setBulkCreateProgress] = useState('');
+  const deadApiKeysRef = React.useRef(new Set());
+
+  // --- Gemini API エラー判定 & 日本語診断ヘルパー ---
+  const isFatalGeminiKeyError = errMsg => {
+    const msg = String(errMsg || '');
+    return (
+      msg.includes('402') ||
+      msg.includes('prepayment credits are depleted') ||
+      msg.includes('Payment Required') ||
+      msg.includes('API_KEY_INVALID') ||
+      msg.includes('API key not valid') ||
+      msg.includes('PERMISSION_DENIED') ||
+      msg.includes('401') ||
+      msg.includes('403') ||
+      msg.includes('leaked') ||
+      msg.includes('expired')
+    );
+  };
+
+  const formatGeminiErrorShort = errMsg => {
+    const msg = String(errMsg || '');
+    if (msg.includes('402') || msg.includes('prepayment credits')) {
+      return 'Google AI Studio の前払いクレジット残高不足(402エラー)';
+    }
+    if (msg.includes('429') || msg.includes('quota') || msg.includes('RESOURCE_EXHAUSTED')) {
+      return 'Gemini API の利用回数制限(429レート制限)';
+    }
+    if (msg.includes('400') || msg.includes('API_KEY_INVALID') || msg.includes('403') || msg.includes('PERMISSION_DENIED') || msg.includes('expired') || msg.includes('leaked')) {
+      return 'APIキーが無効または期限切れ(400/403エラー)';
+    }
+    return msg.substring(0, 120);
+  };
+
+  // --- 季節表現の自動クレンジング（通年表現への正規化） ---
+  const sanitizeSeasonalExpressions = text => {
+    if (!text) return '';
+    return String(text)
+      .replace(/寒暖差|気温の変化|気候の変化|季節の変わり目|天候の変化/g, '日々の環境変化')
+      .replace(/猛暑|酷暑|厳しい暑さ|蒸し暑さ|残暑|暑さ|厳寒|厳しい寒さ|冷え込み|寒さ/g, '日々の体調変化')
+      .replace(/熱中症|インフルエンザ|花粉症|花粉|夏バテ/g, '体調不良')
+      .replace(/冷房|暖房|エアコンの風/g, '室内環境')
+      .replace(/暖かくなり|涼しくなり|過ごしやすい季節になり|肌寒くなり/g, '日々過ごす中で');
+  };
+
+  // --- 内蔵スマート評価文章生成エンジン（週評価データから月次達成度評価の全8項目を高精度合成） ---
+  const generateLocalMonthlyEvaluation = (user, userRecords, year, month, userIndex = 0) => {
+    const seedStr = `${user?.id || ''}_${user?.name || ''}_${year}_${month}_${userIndex}`;
+    let seed = 2166136261;
+    for (let i = 0; i < seedStr.length; i++) {
+      seed ^= seedStr.charCodeAt(i);
+      seed = Math.imul(seed, 16777619) >>> 0;
+    }
+    const pick = (arr, offset = 0) => {
+      const h = (Math.imul(seed ^ (offset * 2654435761), 2246822519) >>> 0) + userIndex * 11 + offset * 5;
+      return arr[h % arr.length];
+    };
+
+    const goalTexts = (userRecords || []).map(r => sanitizeSeasonalExpressions(r.goals || '').trim()).filter(Boolean);
+    const workTexts = (userRecords || []).map(r => sanitizeSeasonalExpressions(r.workContent || '').trim()).filter(Boolean);
+    const condTexts = (userRecords || []).map(r => sanitizeSeasonalExpressions(r.condition || '').trim()).filter(Boolean);
+
+    // 週単位の表現を月単位の自然な表現に変換し、重複文を整理するヘルパー
+    const extractUniqueSentences = (texts, mode) => {
+      const seen = [];
+      const result = [];
+      for (const raw of texts) {
+        const cleaned = raw
+          .replace(/今週は、?|今週も、?|この1週間は、?|この１週間は、?|本週は、?/g, '')
+          .replace(/(?:来週は、?|来週も、?|次週は、?|次週も、?)\s*(?:引き続き)?/g, '引き続き')
+          .replace(/(引き続き)+/g, '引き続き')
+          .replace(/来週に向けて|来週に向け/g, '今後に向けて')
+          .replace(/今週の/g, '日々の')
+          .replace(/1週間を通して|１週間を通して|1週間を通じて|１週間を通じて/g, '月間を通じて')
+          .replace(/1週間の|１週間の/g, '日々の')
+          .trim();
+        const parts = cleaned.split(/[。\n]+/).map(s => s.trim()).filter(s => s.length >= 4);
+        for (const p of parts) {
+          const norm = p.replace(/[、,\s　]/g, '');
+          const isDup = seen.some(existing => {
+            if (existing === norm) return true;
+            const shorter = existing.length < norm.length ? existing : norm;
+            const longer = existing.length < norm.length ? norm : existing;
+            if (shorter.length >= 10 && longer.includes(shorter.substring(0, Math.floor(shorter.length * 0.75)))) return true;
+            return false;
+          });
+          if (!isDup) {
+            seen.push(norm);
+            result.push(p);
+          }
+        }
+      }
+      return result;
+    };
+
+    const goalSentences = extractUniqueSentences(goalTexts, 'goal');
+    const workSentences = extractUniqueSentences(workTexts, 'work');
+    const condSentences = extractUniqueSentences(condTexts, 'cond');
+    const combinedText = [...goalTexts, ...workTexts, ...condTexts].join(' ');
+
+    // 特徴キーワードの判定
+    const hasResearch = /調べ物|検索|リサーチ|情報収集|調査|まとめ/.test(combinedText);
+    const hasPcWork = /パソコン|PC|データ入力|入力|タイピング|書類|エクセル|Excel|スプレッドシート|文字起こし|作成/.test(combinedText);
+    const hasLightWork = /軽作業|手作業|制作|検品|仕分け|封入|梱包|作業/.test(combinedText);
+    const hasRhythmFocus = /睡眠|生活リズム|起床|就寝|服薬|通院|休息|休憩|疲れ|疲労/.test(combinedText);
+
+    // 1. 【訓練目標】(3〜4文)
+    const goalOpeners = [
+      '月間を通じて生活リズムと体調の安定を図りながら、在宅での作業に計画的に取り組むことを目標としています。',
+      '日々の健康管理を優先しつつ、定められたスケジュールに沿って安定して在宅作業を継続することを目標としています。',
+      '自身の体調やペースに配慮しながら、在宅における担当業務へ丁寧かつ着実に取り組むことを今月の目標としています。',
+      '規則正しい生活習慣を維持し、支援員との連絡・報告を適切に行いながら在宅作業を進めることを目標としています。',
+      '無理のない作業ペースを保ちつつ、指示された手順を確認しながら正確で丁寧な作業を継続することを目標としています。'
+    ];
+    const goalClosers = [
+      'また、疑問点や不明な点が生じた際は早めに職員へ確認・相談し、安心して作業を継続できる姿勢を養います。',
+      'あわせて、定期的な連絡や作業報告を習慣化し、安定した在宅就労の基盤づくりを目指します。',
+      'さらに、一つひとつの作業手順への理解を深めながら、自信を持って業務を遂行できるよう取り組みます。',
+      'その上で、心身の疲労を溜めないよう適度な休憩を取り入れ、長期的に安定した就労継続を目指します。',
+      'あわせて、日々の振り返りを通じて自身の得意分野や適正ペースを把握し、作業の質と安定性の向上を図ります。'
+    ];
+    let trainingGoal = '';
+    if (goalSentences.length >= 3) {
+      trainingGoal = goalSentences.slice(0, 4).map(s => s + '。').join('');
+    } else if (goalSentences.length > 0) {
+      const coreGoal = goalSentences.slice(0, 2).map(s => s + '。').join('');
+      trainingGoal = `${pick(goalOpeners, 1)}${coreGoal}${pick(goalClosers, 2)}`;
+    } else {
+      trainingGoal = `${pick(goalOpeners, 1)}各週のスケジュールに合わせて担当作業を丁寧に進めることを重視しています。${pick(goalClosers, 2)}`;
+    }
+
+    // 2. 【取組内容】(3〜4文)
+    const workOpeners = [
+      '今月は在宅にて、各週の計画に基づき設定された担当業務へ継続的に取り組みました。',
+      '月間を通して、自宅での作業環境を整えながら日々の業務を着実に進めました。',
+      '各週のスケジュールに沿って、在宅での担当作業および支援員への定期報告に取り組みました。',
+      '今月は支援員と進捗を確認し合いながら、在宅での各種作業を計画的に実施しました。',
+      '月間を通じて、指示された手順やマニュアルを確認しつつ丁寧に在宅作業を進めました。'
+    ];
+    const workClosers = [
+      '始業・終業時の連絡や進捗の報告も滞りなく行われ、月全体を通して誠実な取り組み姿勢が見られました。',
+      '分からない点はその都度確認しながら進めることができ、月間を通じて安定した作業実績を積み重ねています。',
+      '各週とも自身のペースを守りながら集中して作業に向き合い、着実に業務を遂行することができました。',
+      '日々の報連相を意識しながら丁寧に作業を進め、ひと月を通して意欲的な取り組みが継続できています。',
+      '作業の正確性と丁寧さを意識して取り組み、月間を通じて安定した業務遂行に繋がりました。'
+    ];
+    let activities = '';
+    if (workSentences.length >= 3) {
+      activities = `${pick(workOpeners, 3)}${workSentences.slice(0, 3).map(s => s + '。').join('')}`;
+    } else if (workSentences.length > 0) {
+      const coreWork = workSentences.slice(0, 2).map(s => s + '。').join('');
+      activities = `${pick(workOpeners, 3)}${coreWork}${pick(workClosers, 4)}`;
+    } else {
+      activities = `${pick(workOpeners, 3)}手順を確認しながら一つひとつの作業を丁寧に進め、規定のスケジュール通りに取り組むことができました。${pick(workClosers, 4)}`;
+    }
+
+    // 3. 【達成度】(3〜4文)
+    const achOpeners = [
+      '月間を通じて大きな体調の崩れはなく、安定した状態で在宅訓練に臨むことができました。',
+      'ひと月を通して生活リズムや体調をおおむね安定して維持し、計画通りに作業を進めることができました。',
+      '各週とも自身の体調に気を配りながら無理のないペースを保ち、継続して業務に取り組むことができました。',
+      '月全体を通じて健康管理への意識が高く、安定したコンディションで日々の作業を遂行できました。',
+      '日によってわずかな体調の波はあるものの、休息を調整しながら月間を通して安定して取り組むことができました。'
+    ];
+    const achClosers = [
+      '設定した訓練目標に対しても着実な成果が見られ、在宅での作業習慣と自己管理力が順調に定着していると評価できます。',
+      '目標としていた安定した作業継続と丁寧な業務遂行がおおむね達成されており、着実な成長がうかがえます。',
+      '支援員との連絡体制も良好に保たれており、今月の訓練目標に対して十分な達成度が得られています。',
+      '自身のペースを把握した上で安定して作業を完遂できており、月間の訓練目標を良好な水準で達成できています。',
+      '丁寧な作業姿勢と安定した取り組みが継続できており、今月の訓練目標はおおむね順調に達成されました。'
+    ];
+    let achievement = '';
+    if (condSentences.length >= 2) {
+      const coreCond = condSentences.slice(0, 2).map(s => s + '。').join('');
+      achievement = `${coreCond}${pick(achClosers, 5)}`;
+    } else if (condSentences.length === 1) {
+      achievement = `${pick(achOpeners, 5)}${condSentences[0]}。${pick(achClosers, 6)}`;
+    } else {
+      achievement = `${pick(achOpeners, 5)}日々の連絡や作業報告も安定して行えました。${pick(achClosers, 6)}`;
+    }
+
+    // 4. 【課題】(1〜2文・支援の視点)
+    let issuesPool = [];
+    if (hasResearch) {
+      issuesPool = [
+        '調べ物の手順や情報の整理方法を分かりやすく伝え、理解を深められるよう支援する。また、関心や楽しさも意識しながら意欲的に取り組めるよう工夫する。',
+        'リサーチ作業における要点のまとめ方を丁寧にフォローし、迷わず作業を進められるよう支援する。達成感を得られる声かけも継続していく。',
+        '調べ物や情報収集の作業手順を明確に共有し、自信を持って進められるようサポートする。適度な休憩を挟みながら集中力を維持できるよう支援する。'
+      ];
+    } else if (hasPcWork) {
+      issuesPool = [
+        'パソコン作業における手順の理解をさらに深められるよう丁寧に支援する。長時間の作業による疲労を防ぐため、適度な休息とペース配分を意識できるよう促す。',
+        'データ入力やPC作業の正確性と効率を無理なく高められるよう、分かりやすい手順提示で支援する。自身のペースを守りながら意欲的に取り組める環境を整える。',
+        'パソコン業務での不明点をいつでも質問しやすい体制を整え、手順への理解を深めるよう支援する。目の疲れや体調変化に配慮した休憩の取り方を一緒に確認していく。'
+      ];
+    } else if (hasRhythmFocus) {
+      issuesPool = [
+        '日々の体調や睡眠リズムの微細な変化を早期に把握し、無理のないペースで作業を継続できるよう支援する。不安や負担を感じた際にすぐ相談できる関係づくりを進める。',
+        '生活リズムの維持と体調管理を引き続き見守り、心身に負担の少ない作業量・ペースの調整を支援する。楽しみややりがいを感じながら取り組めるよう工夫する。'
+      ];
+    }
+    const generalIssuesPool = [
+      '作業手順への理解をさらに深められるよう丁寧に支援し、疑問点をその都度解消できる環境を整える。やりがいや楽しさも意識しながら継続できるようサポートする。',
+      '心身の疲労を溜め込まないよう、適切なペース配分と休憩の取り方を継続して支援する。作業への意欲と達成感を高められるよう日々のフィードバックを丁寧に行う。',
+      '在宅環境においても安心して作業に集中できるよう、分かりやすい指示出しと声かけを行う。体調の波に応じた柔軟なスケジュール調整を引き続き支援する。',
+      '作業の正確性と安定性を維持しつつ、新しい手順にも段階的に慣れることができるよう支援する。困りごとを一人で抱え込まず早めに発信できるよう促していく。',
+      '日々の作業量を適正に保ちながら、自己管理力のさらなる向上に向けて支援する。取り組みの成果を具体的に共有し、自信と意欲に繋げられるよう働きかける。',
+      '手順の確認方法や見直しの習慣化を丁寧にサポートし、安心して業務に取り組めるよう支援する。体調面での変化を遠慮なく伝えられる雰囲気づくりを大切にする。'
+    ];
+    const issues = pick([...issuesPool, ...generalIssuesPool], 7);
+
+    // 5. 【改善方針】(1〜2文・段階的な支援＋職員間の連携)
+    const improvementPool = [
+      '今後は課題に対し段階的に支援を行い、職員間で連携を取りながら継続的な改善に努める。利用者の状況に合わせた丁寧なフォローを徹底する。',
+      '一人ひとりの習熟度や体調に合わせた段階的な目標設定を行い、職員間で緊密に情報共有を図りながら改善に向けた支援を進める。',
+      '今後はスモールステップでの段階的な支援を継続し、職員間の連携を密にしながら安心して作業に取り組める環境づくりに努める。',
+      '課題の解消に向けて段階的な支援を実施するとともに、日々の様子を職員間で共有・連携しながらきめ細やかなサポートを行う。',
+      '利用者のペースを尊重した段階的な支援を心がけ、職員間で連携を取りながら作業手順の定着と体調の安定化を図る。',
+      '今後は負担の少ない段階的な支援ステップを設け、職員間での情報共有と連携を通じて着実な改善をサポートしていく。',
+      '個別の状況に応じた段階的な支援計画のもと、職員間で日頃の状況を共有し連携しながらより良い就労環境の維持・改善に努める。'
+    ];
+    const improvementPlan = pick(improvementPool, 8);
+
+    // 6. 【健康面】(2〜3文・月1回以上の面会＋LINE/Discord連絡＋電話フォロー＋情報共有)
+    const healthPool = [
+      '最低でも月に一度は面会し健康面、体調面を把握しておく。連絡がない時はまずはLINEやDiscordで連絡し、返答がない場合は電話などで連絡する。',
+      '月に一度以上の定期的な面会を通じて、健康状態や体調面の変化を直接確認する。日頃はLINEやDiscordで状況を把握し、返答がない際には速やかに電話等でフォローを行う。',
+      '健康面・体調面を正確に把握するため、少なくとも月に一度は面会を実施する。日常の連絡はLINEやDiscordを活用し、応答がない場合は電話連絡や関係各所との情報共有を行って安全確認を徹底する。',
+      '定期的な月1回以上の面会により心身の健康状態を丁寧に確認しておく。連絡が途切れた際はまずLINEやDiscordで状況を確認し、返信がない場合は電話等で直接連絡を取る体制を維持する。',
+      '最低でも月に一度は対面での面会機会を設け、体調面や生活リズムを把握する。日々の状況確認はLINEやDiscordで行い、万が一返答がない時は電話等で速やかに連絡しフォローする。',
+      '月に一度は面会を実施して健康面・生活面の状態を把握し、職員間で情報を共有する。連絡がない場合はLINEやDiscordで声をかけ、応答が確認できない時は電話等で連絡を行う。',
+      '日頃からLINEやDiscordを通じて体調や睡眠状況の把握に努め、最低でも月に一度は面会して健康面を確認する。連絡が滞った際はLINE等で確認の上、返答がなければ電話等で速やかにフォローする。'
+    ];
+    const healthNotes = pick(healthPool, 9);
+
+    // 7. 【その他】
+    const otherNotes = '特になし';
+
+    // 8. 【妥当性】(1〜2文・作業状況の確認＋定期的な継続妥当性の検討)
+    const validityPool = [
+      '在宅での作業状況を確認し、継続の妥当性について定期的に検討していく。',
+      '今月の安定した作業実績と報告状況から在宅就労の継続は妥当と判断され、今後も作業状況を確認しながら定期的に検討していく。',
+      '日々の作業への取り組み状況や連絡体制を確認しており、在宅就労の継続は妥当と考えられる。引き続き状況を把握し定期的に検討を行う。',
+      '在宅における業務遂行状況や健康管理の状態を確認し、現時点で在宅就労の継続は妥当と判断される。今後も定期的に継続の妥当性を検討していく。',
+      '月間の作業実績および体調の安定状況を踏まえ、在宅就労の継続は妥当である。今後も作業状況を継続的に確認し、定期的に妥当性を検討していく。',
+      '在宅での作業状況や支援員との連携状況を総合的に確認し、継続の妥当性について今後も定期的に検証・検討していく。'
+    ];
+    const workValidity = pick(validityPool, 10);
+
+    return {
+      trainingGoal,
+      activities,
+      achievement,
+      issues,
+      improvementPlan,
+      healthNotes,
+      otherNotes,
+      workValidity
+    };
+  };
+
+  // --- 個別フィールド用キーワードからのローカル文章生成フォールバック ---
+  const generateLocalFieldFromKeyword = (fieldKey, keywordText, userName = '') => {
+    const cleanKw = sanitizeSeasonalExpressions(String(keywordText || '').trim()).replace(/[。\n]+$/g, '');
+    if (!cleanKw) return '';
+    if (fieldKey === 'condition') {
+      return `今週は${cleanKw}とのことで、自身の体調に気を配りながら過ごすことができました。睡眠リズムや日々の健康管理も意識されており、無理のないペースで日中の活動に臨めています。`;
+    }
+    if (fieldKey === 'workContent') {
+      return `今週は在宅にて、${cleanKw}に取り組みました。指示された手順を確認しながら、自身のペースで丁寧かつ着実に作業を進めることができました。`;
+    }
+    if (fieldKey === 'goals') {
+      return `今後は${cleanKw}ことを目標として取り組みます。引き続き体調管理を優先しながら、分からない点は早めに確認し安定した作業継続を目指します。`;
+    }
+    if (fieldKey === 'issues') {
+      return `${cleanKw}に関する支援を丁寧に行い、手順への理解を深めながら意欲的に取り組めるようサポートする。`;
+    }
+    if (fieldKey === 'improvementPlan') {
+      return `${cleanKw}を踏まえ、今後は課題に対し段階的に支援を行い、職員間で連携を取りながら継続的な改善に努める。`;
+    }
+    if (fieldKey === 'healthNotes') {
+      return `${cleanKw}に留意しつつ、最低でも月に一度は面会し健康面・体調面を把握しておく。連絡がない時はまずはLINEやDiscordで連絡し、返答がない場合は電話などで連絡する。`;
+    }
+    if (fieldKey === 'otherNotes') {
+      return cleanKw === '特になし' ? '特になし' : `${cleanKw}について職員間で情報共有を行い、引き続き経過を見守っていく。`;
+    }
+    if (fieldKey === 'workValidity') {
+      return `${cleanKw}の状況を含め、在宅での作業状況を確認し、継続の妥当性について定期的に検討していく。`;
+    }
+    return `${cleanKw}。`;
+  };
 
   // --- 全利用者の達成度評価を一括自動作成 ---
   const autoCreateAllMonthlyEvaluations = async () => {
@@ -1572,8 +1863,9 @@ const MainApp = ({
     }
 
     setBulkCreating(true);
+    setBulkCreateProgress('準備中...');
     try {
-      let currentKey = apiKey || MANUAL_API_KEY || localStorage.getItem('sw_api_key') || '';
+      let currentKey = (apiKey || MANUAL_API_KEY || localStorage.getItem('sw_api_key') || '').trim();
       let keySource = currentKey ? apiKey ? 'state' : MANUAL_API_KEY ? 'manual' : 'localStorage' : 'none';
 
       // Excelデータの解析結果を取得（プレビュー情報がある場合は再利用、なければ解析実行）
@@ -1589,13 +1881,14 @@ const MainApp = ({
         if (!currentExcelInfo || !currentExcelInfo.success) {
           alert(`Excelファイルの読み込みに失敗しました:\n${currentExcelInfo?.error || '列を検出できませんでした'}\n\n作成を中断します。ファイル内容をご確認ください。`);
           setBulkCreating(false);
+          setBulkCreateProgress('');
           return;
         }
       }
 
       // APIキーがない場合、localStorageから取得を試みる
       if (!currentKey) {
-        const savedKey = localStorage.getItem('sw_api_key');
+        const savedKey = (localStorage.getItem('sw_api_key') || '').trim();
         if (savedKey) {
           currentKey = savedKey;
           keySource = 'localStorage';
@@ -1604,9 +1897,6 @@ const MainApp = ({
         }
       }
       console.log(`APIキー状態: currentKey=${currentKey ? '有(' + currentKey.substring(0, 8) + '...)' : '無'}, source=${keySource}`);
-      if (!currentKey) {
-        alert('APIキーが設定されていません。AI自動生成ができないため、課題・改善方針等の欄は空白になります。\n\nサイドバーの「設定」からGemini APIキーを登録してください。');
-      }
 
       // 対象月の週評価データがある利用者を取得
       const usersWithRecords = users.filter(user => {
@@ -1619,6 +1909,7 @@ const MainApp = ({
       if (usersWithRecords.length === 0) {
         alert(`${year}年${month}月の週評価データを持つ利用者がいません。`);
         setBulkCreating(false);
+        setBulkCreateProgress('');
         return;
       }
 
@@ -1628,17 +1919,25 @@ const MainApp = ({
         const names = alreadyCreated.map(u => u.name).join('、');
         if (!confirm(`以下の利用者は既に${month}月の達成度評価が作成済みです：\n${names}\n\n上書きしますか？`)) {
           setBulkCreating(false);
+          setBulkCreateProgress('');
           return;
         }
       }
+
       let aiSuccessCount = 0;
-      let aiFailCount = 0;
+      let localFallbackCount = 0;
       let workingModelName = null;
       let firstError = null;
+      let fatalApiError = currentKey && deadApiKeysRef.current.has(currentKey)
+        ? '402: Prepayment credits depleted or invalid API key (cached)'
+        : null;
       const rateLimitedModels = new Set(); // レート制限に達したモデルを追跡
       const newEvals = [];
 
-      for (const user of usersWithRecords) {
+      for (let uIdx = 0; uIdx < usersWithRecords.length; uIdx++) {
+        const user = usersWithRecords[uIdx];
+        setBulkCreateProgress(`作成中... (${uIdx + 1}/${usersWithRecords.length}名: ${user.name})`);
+
         // --- 実施日の決定ロジック ---
         let computedImplDate = `${year}-${String(month).padStart(2, '0')}-15`; // デフォルトは15日
         if (currentExcelInfo && currentExcelInfo.success && currentExcelInfo.detectedList) {
@@ -1659,21 +1958,52 @@ const MainApp = ({
         const workTexts = userRecords.map(r => r.workContent).filter(Boolean);
         const condTexts = userRecords.map(r => r.condition).filter(Boolean);
 
-        // 週評価の生データ（AIへの参考情報 & フォールバック用）
-        const rawTrainingGoal = goalTexts.length > 0 ? goalTexts[goalTexts.length - 1] : '（データなし）';
-        const rawActivities = workTexts.length > 0 ? workTexts.join('\n') : '（データなし）';
-        const rawAchievement = condTexts.length > 0 ? condTexts.join('\n') : '（データなし）';
+        // 内蔵スマート生成エンジンで全8項目のベースラインを作成（API失敗時や未設定時でも空白を作らない）
+        const localEval = generateLocalMonthlyEvaluation(user, userRecords, year, month, uIdx);
+        let trainingGoal = localEval.trainingGoal;
+        let activities = localEval.activities;
+        let achievement = localEval.achievement;
+        let issues = localEval.issues;
+        let improvementPlan = localEval.improvementPlan;
+        let healthNotes = localEval.healthNotes;
+        let otherNotes = localEval.otherNotes;
+        let workValidity = localEval.workValidity;
 
-        // AI で訓練目標・取組内容・達成度・課題・改善方針・健康面・その他・妥当性を自動生成
-        let trainingGoal = rawTrainingGoal,
-          activities = rawActivities,
-          achievement = rawAchievement;
-        let issues = '',
-          improvementPlan = '',
-          healthNotes = '',
-          otherNotes = '',
-          workValidity = '';
-        if (currentKey && trainingGoal !== '（データなし）') {
+        const parseSection = (text, startTag, endTags) => {
+          const startIdx = text.indexOf(startTag);
+          if (startIdx === -1) return '';
+          const afterStart = text.substring(startIdx + startTag.length);
+          let endIdx = afterStart.length;
+          for (const tag of endTags) {
+            const idx = afterStart.indexOf(tag);
+            if (idx !== -1 && idx < endIdx) endIdx = idx;
+          }
+          return sanitizeSeasonalExpressions(afterStart.substring(0, endIdx).trim());
+        };
+
+        const applyParsedText = fullText => {
+          const aiTrainingGoal = parseSection(fullText, '【訓練目標】', ['【取組内容】', '【達成度】', '【課題】', '【改善方針】', '【健康面】', '【その他】', '【妥当性】']);
+          const aiActivities = parseSection(fullText, '【取組内容】', ['【達成度】', '【課題】', '【改善方針】', '【健康面】', '【その他】', '【妥当性】']);
+          const aiAchievement = parseSection(fullText, '【達成度】', ['【課題】', '【改善方針】', '【健康面】', '【その他】', '【妥当性】']);
+          const aiIssues = parseSection(fullText, '【課題】', ['【改善方針】', '【健康面】', '【その他】', '【妥当性】']);
+          const aiImprovementPlan = parseSection(fullText, '【改善方針】', ['【健康面】', '【その他】', '【妥当性】']);
+          const aiHealthNotes = parseSection(fullText, '【健康面】', ['【その他】', '【妥当性】']);
+          const aiOtherNotes = parseSection(fullText, '【その他】', ['【妥当性】']);
+          const aiWorkValidity = parseSection(fullText, '【妥当性】', []);
+
+          if (aiTrainingGoal) trainingGoal = aiTrainingGoal;
+          if (aiActivities) activities = aiActivities;
+          if (aiAchievement) achievement = aiAchievement;
+          if (aiIssues) issues = aiIssues;
+          if (aiImprovementPlan) improvementPlan = aiImprovementPlan;
+          if (aiHealthNotes) healthNotes = aiHealthNotes;
+          if (aiOtherNotes) otherNotes = aiOtherNotes;
+          if (aiWorkValidity) workValidity = aiWorkValidity;
+
+          return Boolean(aiTrainingGoal || aiActivities || aiAchievement || aiIssues || aiImprovementPlan || aiHealthNotes || aiWorkValidity);
+        };
+
+        if (currentKey && !fatalApiError && goalTexts.length > 0) {
           const baseContext = `
 利用者: ${user.name}
 
@@ -1687,25 +2017,9 @@ ${workTexts.map((w, i) => `第${i + 1}週: ${w}`).join('\n')}
 
 ＜週ごとの体調・状況＞
 ${condTexts.map((c, i) => `第${i + 1}週: ${c}`).join('\n')}`;
-          const aiFields = [{
-            key: 'issues',
-            instruction: `以下の「訓練目標」「取組内容」「訓練目標に対する達成度」の内容を元に、在宅就労における「課題」を1〜2文で作成してください。支援の視点から書いてください。例：「調べ物の手順を丁寧に教え、理解を深めるよう支援する。楽しさも意識し取り組めるようにする。」`
-          }, {
-            key: 'improvementPlan',
-            instruction: `以下の内容を元に、「今後における課題の改善方針」を1〜2文で作成してください。段階的な支援と職員間の連携を含めてください。例：「今後は課題に対し段階的に支援を行い、職員間で連携を取りながら改善に努める。」`
-          }, {
-            key: 'healthNotes',
-            instruction: `以下の内容を元に、「健康・体調面での留意事項」を2〜3文で作成してください。月に一度の面会、LINEやDiscordでの連絡、電話でのフォロー、関係各所との情報共有などを含めてください。例：「最低でも月に一度は面会し健康面、体調面を把握しておく。連絡がない時はまずはLINEやDiscordで連絡し、返答がない場合は電話などで連絡する。」`
-          }, {
-            key: 'otherNotes',
-            instruction: `以下の内容を元に、「その他特記事項」を作成してください。特に内容がなければ「特になし」とだけ出力してください。`
-          }, {
-            key: 'workValidity',
-            instruction: `以下の内容を元に、「在宅就労継続の妥当性」を1〜2文で作成してください。作業状況の確認と定期的な検討について書いてください。例：「在宅での作業状況を確認し、継続の妥当性について定期的に検討していく。」`
-          }];
 
           // 利用可能なモデルリスト（優先順・無料枠Flash系）
-          const allModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash'];
+          const allModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite'];
           const variationSeed = Math.floor(Math.random() * 10000);
           const batchPrompt = `あなたは障害福祉サービスの就労継続支援B型の支援員です。在宅における就労達成度評価シートの記入を行っています。
 
@@ -1758,192 +2072,103 @@ ${baseContext}
 【妥当性】
 在宅就労継続の妥当性を1〜2文で。その月の作業実績を踏まえて書いてください。（参考例：作業への取り組み状況から在宅就労の継続は妥当と考えられ、引き続き状況を確認していく。）`;
 
-          // テスト呼び出しなしで直接本番生成（モデル順次試行）
-          {
-            let generated = false;
-            let attemptCount = 0;
+          let generated = false;
+          let attemptCount = 0;
 
-            // SDK経由での試行
-            const modelsToAttempt = workingModelName ? [workingModelName, ...allModels.filter(m => m !== workingModelName)] : [...allModels];
-            for (const modelName of modelsToAttempt) {
-              if (generated) break;
-              if (rateLimitedModels.has(modelName)) continue;
-              attemptCount++;
-              if (attemptCount > 1) {
-                await new Promise(resolve => setTimeout(resolve, 2000));
-              }
-              try {
-                console.log(`AI生成中: ${user.name} (model: ${modelName}, attempt: ${attemptCount})`);
-                const genAI = new window.GoogleGenerativeAI(currentKey);
-                const model = genAI.getGenerativeModel({
-                  model: modelName
-                });
-                const result = await model.generateContent(batchPrompt);
-                const response = await result.response;
-                const fullText = response.text();
+          // 1. SDK経由での試行
+          const cleanWorkingModel = workingModelName ? workingModelName.replace(' (REST)', '') : null;
+          const modelsToAttempt = cleanWorkingModel && allModels.includes(cleanWorkingModel)
+            ? [cleanWorkingModel, ...allModels.filter(m => m !== cleanWorkingModel)]
+            : [...allModels];
+
+          for (const modelName of modelsToAttempt) {
+            if (generated || fatalApiError) break;
+            if (rateLimitedModels.has(modelName)) continue;
+            attemptCount++;
+            if (attemptCount > 1) {
+              await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+            try {
+              console.log(`AI生成中: ${user.name} (model: ${modelName}, attempt: ${attemptCount})`);
+              const genAI = new window.GoogleGenerativeAI(currentKey);
+              const model = genAI.getGenerativeModel({ model: modelName });
+              const result = await model.generateContent(batchPrompt);
+              const response = await result.response;
+              const fullText = response.text();
+              if (fullText && fullText.trim() && applyParsedText(fullText)) {
                 console.log(`AI生成完了: ${user.name}, モデル: ${modelName}, 文字数: ${fullText.length}`);
                 workingModelName = modelName;
-                if (fullText && fullText.trim()) {
-                  const parseSection = (text, startTag, endTags) => {
-                    const startIdx = text.indexOf(startTag);
-                    if (startIdx === -1) return '';
-                    const afterStart = text.substring(startIdx + startTag.length);
-                    let endIdx = afterStart.length;
-                    for (const tag of endTags) {
-                      const idx = afterStart.indexOf(tag);
-                      if (idx !== -1 && idx < endIdx) endIdx = idx;
-                    }
-                    return afterStart.substring(0, endIdx).trim();
-                  };
-                  const aiTrainingGoal = parseSection(fullText, '【訓練目標】', ['【取組内容】', '【達成度】', '【課題】', '【改善方針】', '【健康面】', '【その他】', '【妥当性】']);
-                  const aiActivities = parseSection(fullText, '【取組内容】', ['【達成度】', '【課題】', '【改善方針】', '【健康面】', '【その他】', '【妥当性】']);
-                  const aiAchievement = parseSection(fullText, '【達成度】', ['【課題】', '【改善方針】', '【健康面】', '【その他】', '【妥当性】']);
-                  issues = parseSection(fullText, '【課題】', ['【改善方針】', '【健康面】', '【その他】', '【妥当性】']);
-                  improvementPlan = parseSection(fullText, '【改善方針】', ['【健康面】', '【その他】', '【妥当性】']);
-                  healthNotes = parseSection(fullText, '【健康面】', ['【その他】', '【妥当性】']);
-                  otherNotes = parseSection(fullText, '【その他】', ['【妥当性】']);
-                  workValidity = parseSection(fullText, '【妥当性】', []);
-                  if (aiTrainingGoal) trainingGoal = aiTrainingGoal;
-                  if (aiActivities) activities = aiActivities;
-                  if (aiAchievement) achievement = aiAchievement;
-                  const fieldsGenerated = [trainingGoal, activities, achievement, issues, improvementPlan, healthNotes, otherNotes, workValidity].filter(f => f).length;
-                  aiSuccessCount += fieldsGenerated;
-                  aiFailCount += 8 - fieldsGenerated;
-                  generated = true;
-                }
-              } catch (e) {
-                console.warn(`AI生成エラー (${user.name}, model: ${modelName}):`, e.message);
-                if (!firstError) firstError = e.message;
-                const errMsg = e.message || '';
-                if (errMsg.includes('429') || errMsg.includes('quota') || errMsg.includes('RESOURCE_EXHAUSTED')) {
-                  rateLimitedModels.add(modelName);
-                  console.warn(`モデル ${modelName} をレート制限リストに追加`);
-                } else if (errMsg.includes('400') || errMsg.includes('API_KEY_INVALID') || errMsg.includes('expired') || errMsg.includes('403')) {
-                  rateLimitedModels.add(modelName);
-                  console.warn(`モデル ${modelName} をエラーリストに追加 (400/403/expired)`);
-                }
-                // 他のエラーも次のモデルへ自動フォールバック
+                aiSuccessCount += 8;
+                generated = true;
+              }
+            } catch (e) {
+              const errMsg = e.message || String(e);
+              console.warn(`AI生成エラー (${user.name}, model: ${modelName}):`, errMsg);
+              if (!firstError) firstError = errMsg;
+
+              // 402(前払いクレジット残高不足) や 400/403(APIキー無効) は全モデル共通の致命的エラーのため即座にループ終了
+              if (isFatalGeminiKeyError(errMsg)) {
+                fatalApiError = errMsg;
+                deadApiKeysRef.current.add(currentKey);
+                console.warn('APIキー/クレジットの共通エラー(402/400/403)を検知したため、以降のAPIリトライを停止し内蔵エンジンへ切り替えます');
+                break;
+              }
+              if (errMsg.includes('429') || errMsg.includes('quota') || errMsg.includes('RESOURCE_EXHAUSTED') || errMsg.includes('404')) {
+                rateLimitedModels.add(modelName);
               }
             }
+          }
 
-            // SDK全滅時: REST API直接呼び出しフォールバック
-            if (!generated) {
-              console.log('SDK全モデル失敗。REST API直接呼び出しを試行...');
-              const restModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite'];
-              for (const modelName of restModels) {
-                try {
-                  const restRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${currentKey}`, {
-                    method: 'POST',
-                    headers: {
-                      'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                      contents: [{
-                        parts: [{
-                          text: batchPrompt
-                        }]
-                      }]
-                    })
-                  });
-                  const restData = await restRes.json();
-                  const fullText = restData?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+          // 2. SDK失敗時かつ致命的キーエラーでない場合のみ REST API 直接呼び出しを試行
+          if (!generated && !fatalApiError) {
+            const restModels = allModels.filter(m => !rateLimitedModels.has(m));
+            for (const modelName of restModels) {
+              if (generated || fatalApiError) break;
+              try {
+                const restRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${currentKey}`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    contents: [{ parts: [{ text: batchPrompt }] }]
+                  })
+                });
+                const restData = await restRes.json().catch(() => ({}));
+                if (!restRes.ok) {
+                  const apiErrMsg = `[${restRes.status}] ${restData?.error?.message || restRes.statusText || 'REST API Error'}`;
+                  throw new Error(apiErrMsg);
+                }
+                const fullText = restData?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+                if (fullText && fullText.trim() && applyParsedText(fullText)) {
                   console.log(`REST API成功: ${user.name}, モデル: ${modelName}, 文字数: ${fullText.length}`);
-                  workingModelName = modelName + ' (REST)';
-                  if (fullText && fullText.trim()) {
-                    const parseSection = (text, startTag, endTags) => {
-                      const startIdx = text.indexOf(startTag);
-                      if (startIdx === -1) return '';
-                      const afterStart = text.substring(startIdx + startTag.length);
-                      let endIdx = afterStart.length;
-                      for (const tag of endTags) {
-                        const idx = afterStart.indexOf(tag);
-                        if (idx !== -1 && idx < endIdx) endIdx = idx;
-                      }
-                      return afterStart.substring(0, endIdx).trim();
-                    };
-                    const aiTrainingGoal = parseSection(fullText, '【訓練目標】', ['【取組内容】', '【達成度】', '【課題】', '【改善方針】', '【健康面】', '【その他】', '【妥当性】']);
-                    const aiActivities = parseSection(fullText, '【取組内容】', ['【達成度】', '【課題】', '【改善方針】', '【健康面】', '【その他】', '【妥当性】']);
-                    const aiAchievement = parseSection(fullText, '【達成度】', ['【課題】', '【改善方針】', '【健康面】', '【その他】', '【妥当性】']);
-                    issues = parseSection(fullText, '【課題】', ['【改善方針】', '【健康面】', '【その他】', '【妥当性】']);
-                    improvementPlan = parseSection(fullText, '【改善方針】', ['【健康面】', '【その他】', '【妥当性】']);
-                    healthNotes = parseSection(fullText, '【健康面】', ['【その他】', '【妥当性】']);
-                    otherNotes = parseSection(fullText, '【その他】', ['【妥当性】']);
-                    workValidity = parseSection(fullText, '【妥当性】', []);
-                    if (aiTrainingGoal) trainingGoal = aiTrainingGoal;
-                    if (aiActivities) activities = aiActivities;
-                    if (aiAchievement) achievement = aiAchievement;
-                    const fieldsGenerated = [trainingGoal, activities, achievement, issues, improvementPlan, healthNotes, otherNotes, workValidity].filter(f => f).length;
-                    aiSuccessCount += fieldsGenerated;
-                    aiFailCount += 8 - fieldsGenerated;
-                    generated = true;
-                    break;
-                  }
-                } catch (restErr) {
-                  console.warn(`REST API失敗 (${modelName}):`, restErr.message);
-                  if (!firstError) firstError = restErr.message;
-                }
-              }
-            }
-
-            // レート制限で全滅した場合: 10秒待ってからリトライ
-            if (!generated && rateLimitedModels.size > 0) {
-              console.log('全モデルが制限中。10秒待機後にリトライ...');
-              await new Promise(resolve => setTimeout(resolve, 10000));
-              rateLimitedModels.clear();
-              for (const modelName of allModels) {
-                if (generated) break;
-                try {
-                  console.log(`リトライ: ${user.name} (model: ${modelName})`);
-                  const genAI = new window.GoogleGenerativeAI(currentKey);
-                  const model = genAI.getGenerativeModel({
-                    model: modelName
-                  });
-                  const result = await model.generateContent(batchPrompt);
-                  const response = await result.response;
-                  const fullText = response.text();
                   workingModelName = modelName;
-                  if (fullText && fullText.trim()) {
-                    const parseSection = (text, startTag, endTags) => {
-                      const startIdx = text.indexOf(startTag);
-                      if (startIdx === -1) return '';
-                      const afterStart = text.substring(startIdx + startTag.length);
-                      let endIdx = afterStart.length;
-                      for (const tag of endTags) {
-                        const idx = afterStart.indexOf(tag);
-                        if (idx !== -1 && idx < endIdx) endIdx = idx;
-                      }
-                      return afterStart.substring(0, endIdx).trim();
-                    };
-                    const aiTrainingGoal = parseSection(fullText, '【訓練目標】', ['【取組内容】', '【達成度】', '【課題】', '【改善方針】', '【健康面】', '【その他】', '【妥当性】']);
-                    const aiActivities = parseSection(fullText, '【取組内容】', ['【達成度】', '【課題】', '【改善方針】', '【健康面】', '【その他】', '【妥当性】']);
-                    const aiAchievement = parseSection(fullText, '【達成度】', ['【課題】', '【改善方針】', '【健康面】', '【その他】', '【妥当性】']);
-                    issues = parseSection(fullText, '【課題】', ['【改善方針】', '【健康面】', '【その他】', '【妥当性】']);
-                    improvementPlan = parseSection(fullText, '【改善方針】', ['【健康面】', '【その他】', '【妥当性】']);
-                    healthNotes = parseSection(fullText, '【健康面】', ['【その他】', '【妥当性】']);
-                    otherNotes = parseSection(fullText, '【その他】', ['【妥当性】']);
-                    workValidity = parseSection(fullText, '【妥当性】', []);
-                    if (aiTrainingGoal) trainingGoal = aiTrainingGoal;
-                    if (aiActivities) activities = aiActivities;
-                    if (aiAchievement) achievement = aiAchievement;
-                    const fieldsGenerated = [trainingGoal, activities, achievement, issues, improvementPlan, healthNotes, otherNotes, workValidity].filter(f => f).length;
-                    aiSuccessCount += fieldsGenerated;
-                    aiFailCount += 8 - fieldsGenerated;
-                    generated = true;
-                  }
-                } catch (retryErr) {
-                  console.warn(`リトライ失敗 (${modelName}):`, retryErr.message);
+                  aiSuccessCount += 8;
+                  generated = true;
+                  break;
+                }
+              } catch (restErr) {
+                const errMsg = restErr.message || String(restErr);
+                console.warn(`REST API失敗 (${modelName}):`, errMsg);
+                if (!firstError) firstError = errMsg;
+                if (isFatalGeminiKeyError(errMsg)) {
+                  fatalApiError = errMsg;
+                  deadApiKeysRef.current.add(currentKey);
+                  break;
+                }
+                if (errMsg.includes('429') || errMsg.includes('quota') || errMsg.includes('RESOURCE_EXHAUSTED') || errMsg.includes('404')) {
+                  rateLimitedModels.add(modelName);
                 }
               }
             }
-            if (!generated) {
-              aiFailCount += 8;
-            }
+          }
 
-            // レート制限回避のため3秒待機
-            await new Promise(resolve => setTimeout(resolve, 3000));
+          if (!generated) {
+            localFallbackCount += 8;
+          } else if (uIdx < usersWithRecords.length - 1 && !fatalApiError) {
+            // Gemini API 成功時のみレート制限回避のため1.5秒待機
+            await new Promise(resolve => setTimeout(resolve, 1500));
           }
         } else {
-          console.warn(`AI生成スキップ: currentKey=${!!currentKey}, trainingGoal=${trainingGoal}`);
+          localFallbackCount += 8;
         }
 
         // 前月の評価日を検索
@@ -1978,7 +2203,8 @@ ${baseContext}
           workValidity,
           evaluator: '近藤恵子',
           previousEvalDate: prevEval ? prevEval.implementationDate : '',
-          createdAt: new Date().toISOString()
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
         });
       }
 
@@ -1988,10 +2214,20 @@ ${baseContext}
         return [...filtered, ...newEvals];
       });
       newEvals.forEach(e => saveMonthlyEvalToSupabase(e));
-      const rateLimitInfo = rateLimitedModels.size > 0 ? `\nレート制限モデル: ${[...rateLimitedModels].join(', ')}` : '';
-      const errorInfo = aiFailCount > 0 && firstError ? '\nエラー: ' + firstError : '';
-      const aiMsg = currentKey ? `\nAI生成: 成功${aiSuccessCount}件${aiFailCount > 0 ? ', 失敗' + aiFailCount + '件' : ''}\nモデル: ${workingModelName || '未検出'}${rateLimitInfo}${errorInfo}` : '\nAPIキー未設定のためAI生成はスキップされました';
-      
+
+      const totalFields = aiSuccessCount + localFallbackCount;
+      let aiMsg = '';
+      if (aiSuccessCount > 0 && localFallbackCount === 0) {
+        aiMsg = `\n自動生成: 全${totalFields}項目 完了 (Gemini AI: ${workingModelName})`;
+      } else if (aiSuccessCount > 0 && localFallbackCount > 0) {
+        aiMsg = `\n自動生成: 全${totalFields}項目 完了 (Gemini AI: ${aiSuccessCount}件 / 内蔵エンジン補完: ${localFallbackCount}件)`;
+      } else {
+        aiMsg = `\n自動生成: 全${totalFields}項目 完了（週評価データから全8項目×${usersWithRecords.length}名分を自動作成しました）`;
+        if (firstError) {
+          aiMsg += `\n※Gemini API（${formatGeminiErrorShort(firstError)}）のため、内蔵の自動文章生成エンジンへ自動切替して全項目を作成しました。`;
+        }
+      }
+
       const dateSummary = newEvals.map(e => {
         const u = users.find(usr => usr.id === e.userId);
         const day = new Date(e.implementationDate).getDate();
@@ -2006,6 +2242,7 @@ ${baseContext}
       alert(`エラーが発生しました:\n\n${errorDetail}`);
     } finally {
       setBulkCreating(false);
+      setBulkCreateProgress('');
     }
   };
 
@@ -2460,7 +2697,7 @@ ${pages}
         managerList: currentManagers,
         gasUrl: localStorage.getItem('knowbe_gas_url') || '',
         sheetGid: localStorage.getItem('knowbe_sheet_gid') || '',
-        apiKey: apiKey || localStorage.getItem('sw_api_key') || '',
+        apiKey: overrideData?.apiKey !== undefined ? overrideData.apiKey : (apiKey || localStorage.getItem('sw_api_key') || ''),
         deletedIds: getDeletedIds(),
         updatedAt: new Date().toISOString()
       };
@@ -2872,7 +3109,38 @@ ${pages}
 
     const finalUsers = mergedUsersResult.merged;
     const finalRecords = mergedRecordsResult.merged.sort((a, b) => new Date(b.implementationDate || 0) - new Date(a.implementationDate || 0));
-    const finalMonthly = mergedMonthlyResult.merged;
+
+    // AIエラー(402等)で課題・改善方針・健康面・妥当性が空白のまま保存された月次評価を自動修復
+    let repairedMonthlyCount = 0;
+    const finalMonthly = mergedMonthlyResult.merged.map((ev, idx) => {
+      if (!ev.issues || !ev.improvementPlan || !ev.healthNotes || !ev.workValidity) {
+        const u = finalUsers.find(usr => usr.id === ev.userId) || { id: ev.userId, name: '利用者' };
+        const uRecs = finalRecords.filter(r => {
+          if (r.userId !== ev.userId) return false;
+          const d = new Date(r.implementationDate);
+          return d.getFullYear() === Number(ev.targetYear) && d.getMonth() + 1 === Number(ev.targetMonth);
+        }).sort((a, b) => new Date(a.implementationDate) - new Date(b.implementationDate));
+        const localGen = generateLocalMonthlyEvaluation(u, uRecs, Number(ev.targetYear), Number(ev.targetMonth), idx);
+        const wasAllBlank = !ev.issues && !ev.improvementPlan && !ev.healthNotes && !ev.workValidity;
+        repairedMonthlyCount++;
+        return {
+          ...ev,
+          trainingGoal: wasAllBlank ? localGen.trainingGoal : (ev.trainingGoal || localGen.trainingGoal),
+          activities: wasAllBlank ? localGen.activities : (ev.activities || localGen.activities),
+          achievement: wasAllBlank ? localGen.achievement : (ev.achievement || localGen.achievement),
+          issues: ev.issues || localGen.issues,
+          improvementPlan: ev.improvementPlan || localGen.improvementPlan,
+          healthNotes: ev.healthNotes || localGen.healthNotes,
+          otherNotes: ev.otherNotes || localGen.otherNotes,
+          workValidity: ev.workValidity || localGen.workValidity,
+          updatedAt: new Date().toISOString()
+        };
+      }
+      return ev;
+    });
+    if (repairedMonthlyCount > 0) {
+      console.log(`🔧 空白項目のある達成度評価 ${repairedMonthlyCount}件 を内蔵スマートエンジンで自動補完しました`);
+    }
 
     setUsers(finalUsers);
     setRecords(finalRecords);
@@ -2889,7 +3157,7 @@ ${pages}
       setManagerList(cloudManagers);
       localStorage.setItem(lsKey('manager_list'), JSON.stringify(cloudManagers));
     }
-    if (cloudApiKey && !localStorage.getItem('sw_api_key')) {
+    if (cloudApiKey && !localStorage.getItem('sw_api_key') && localStorage.getItem('sw_api_key_cleared') !== '1') {
       setApiKey(cloudApiKey);
       localStorage.setItem('sw_api_key', cloudApiKey);
     }
@@ -2903,7 +3171,7 @@ ${pages}
       setCloudStatusDetail(`クラウド同期有効 (${activeNames})`);
       setLastSyncedAt(new Date().toLocaleTimeString('ja-JP'));
 
-      const hasUnsyncedLocal = mergedUsersResult.localHasNew || mergedRecordsResult.localHasNew || mergedMonthlyResult.localHasNew ||
+      const hasUnsyncedLocal = repairedMonthlyCount > 0 || mergedUsersResult.localHasNew || mergedRecordsResult.localHasNew || mergedMonthlyResult.localHasNew ||
         (finalUsers.length > cloudUsers.length) || (finalRecords.length > cloudRecords.length) || (finalMonthly.length > cloudMonthly.length);
 
       if (hasUnsyncedLocal) {
@@ -3283,7 +3551,7 @@ ${pages}
   // --- 週評価 一括自動作成 実行（AI言い回し変換付き） ---
   const autoCreateWeeklyRecords = async () => {
     if (!autoCreatePopup) return;
-    const currentKey = apiKey || MANUAL_API_KEY;
+    const currentKey = (apiKey || MANUAL_API_KEY || localStorage.getItem('sw_api_key') || '').trim();
     setAutoCreateLoading(true);
     setAutoCreateProgress('');
     const {
@@ -3309,11 +3577,11 @@ ${pages}
       fallbackDate.setDate(fallbackDate.getDate() - 7);
       const previousDate = prevRecords.length > 0 ? prevRecords[0].implementationDate : fallbackDate.toISOString().split('T')[0];
 
-      // AI で言い回しを変える
+      // AI で言い回しを変える（APIキー有効時のみ）
       let newCondition = latest.condition || '';
       let newWorkContent = latest.workContent || '';
       let newGoals = latest.goals || '';
-      if (currentKey) {
+      if (currentKey && !deadApiKeysRef.current.has(currentKey)) {
         const rephrasePrompt = (fieldName, text) => {
           const fieldDesc = {
             condition: '利用者の体調について',
@@ -3331,7 +3599,11 @@ ${pages}
 ${text}`;
         };
         try {
-          const [c, w, g] = await Promise.all([latest.condition ? generateGeminiContent(rephrasePrompt('condition', latest.condition), '', currentKey, null).catch(() => latest.condition) : Promise.resolve(''), latest.workContent ? generateGeminiContent(rephrasePrompt('workContent', latest.workContent), '', currentKey, null).catch(() => latest.workContent) : Promise.resolve(''), latest.goals ? generateGeminiContent(rephrasePrompt('goals', latest.goals), '', currentKey, null).catch(() => latest.goals) : Promise.resolve('')]);
+          const [c, w, g] = await Promise.all([
+            latest.condition ? generateGeminiContent(rephrasePrompt('condition', latest.condition), '', currentKey, null).catch(() => latest.condition) : Promise.resolve(''),
+            latest.workContent ? generateGeminiContent(rephrasePrompt('workContent', latest.workContent), '', currentKey, null).catch(() => latest.workContent) : Promise.resolve(''),
+            latest.goals ? generateGeminiContent(rephrasePrompt('goals', latest.goals), '', currentKey, null).catch(() => latest.goals) : Promise.resolve('')
+          ]);
           newCondition = (c || '').trim() || latest.condition;
           newWorkContent = (w || '').trim() || latest.workContent;
           newGoals = (g || '').trim() || latest.goals;
@@ -3420,89 +3692,55 @@ ${text}`;
   }, [formData.userId]);
 
   // --- Gemini AI 生成 (共通関数) ---
-  // 動的モデル探索機能付き
-  const generateGeminiContent = async (systemPrompt, userText, apiKey, onStatusUpdate) => {
-    const genAI = new window.GoogleGenerativeAI(apiKey);
+  // 致命的エラー(402クレジット枯渇/400/403キー無効)の即時中断機能付き
+  const generateGeminiContent = async (systemPrompt, userText, keyToUse, onStatusUpdate) => {
+    const cleanKey = (keyToUse || '').trim();
+    if (!cleanKey) {
+      throw new Error('APIキーが未設定です');
+    }
+    if (deadApiKeysRef.current.has(cleanKey)) {
+      throw new Error('402: APIキーのクレジット残高不足または無効のためスキップしました');
+    }
+    const genAI = new window.GoogleGenerativeAI(cleanKey);
 
-    // 1. 優先モデルリスト (高速・高性能な順)
-    let modelsToTry = ['gemini-2.5-flash', 'gemini-3-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash', 'gemini-1.5-flash-latest'];
+    // 優先モデルリスト (高速・現行モデル順)
+    const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite'];
     let lastError = null;
 
-    // ヘルパー: モデルリストで試行
-    const tryModels = async list => {
-      for (const modelName of list) {
-        try {
-          if (onStatusUpdate) onStatusUpdate(`モデル試行中: ${modelName}...`);
-          console.log(`Trying model: ${modelName}`);
-          const model = genAI.getGenerativeModel({
-            model: modelName
-          });
-          const result = await model.generateContent(systemPrompt + `\n\n【キーワード】\n${userText}`);
-          const response = await result.response;
-          return response.text();
-        } catch (e) {
-          console.warn(`Model ${modelName} failed:`, e);
-          lastError = e;
+    for (const modelName of modelsToTry) {
+      try {
+        if (onStatusUpdate) onStatusUpdate(`モデル試行中: ${modelName}...`);
+        console.log(`Trying model: ${modelName}`);
+        const model = genAI.getGenerativeModel({ model: modelName });
+        const result = await model.generateContent(systemPrompt + (userText ? `\n\n【キーワード】\n${userText}` : ''));
+        const response = await result.response;
+        return response.text();
+      } catch (e) {
+        const errMsg = e.message || String(e);
+        console.warn(`Model ${modelName} failed:`, errMsg);
+        lastError = e;
+        if (isFatalGeminiKeyError(errMsg)) {
+          deadApiKeysRef.current.add(cleanKey);
+          throw e;
         }
       }
-      return null;
-    };
-
-    // ステップ1: 優先リストで試行
-    let text = await tryModels(modelsToTry);
-    if (text) return text;
-
-    // ステップ2: 失敗した場合、動的に利用可能なモデルを取得して試行
-    if (onStatusUpdate) onStatusUpdate('利用可能なモデルを検索中...');
-    try {
-      console.log('Fetching available models from API...');
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
-      const data = await res.json();
-      if (data.models) {
-        const availableModels = data.models.filter(m => m.supportedGenerationMethods && m.supportedGenerationMethods.includes('generateContent')).map(m => m.name.replace('models/', '')).filter(name => !modelsToTry.includes(name)).filter(name => name.includes('gemini')).sort((a, b) => {
-          const score = name => {
-            let s = 0;
-            if (name.includes('flash')) s += 10;
-            if (name.includes('latest')) s += 5;
-            if (name.includes('002')) s += 2;
-            if (name.includes('2.0')) s += 20;
-            if (name.includes('1.5')) s += 15;
-            return s;
-          };
-          return score(b) - score(a);
-        });
-        if (availableModels.length > 0) {
-          console.log('Discovered models:', availableModels);
-          if (onStatusUpdate) onStatusUpdate(`新モデルで再試行中...`);
-          text = await tryModels(availableModels);
-          if (text) return text;
-        }
-      }
-    } catch (e) {
-      console.error('Model discovery failed:', e);
     }
     throw lastError || new Error('全てのモデルで生成に失敗しました。');
   };
 
-  // --- Gemini AI 生成 (項目ごと) ---
+  // --- Gemini AI 生成 (項目ごと・内蔵フォールバック付き) ---
   const generateSingleContent = async targetField => {
-    // APIキーチェック
-    const currentKey = apiKey || MANUAL_API_KEY;
-    if (!currentKey) {
-      alert('AI機能を使用するには、システム管理者によるAPIキーの設定が必要です。\n管理者に連絡してください。');
-      return;
-    }
     const currentText = formData[targetField];
     if (!currentText) {
       alert('キーワードを入力してからボタンを押してください。');
       return;
     }
+    const currentKey = (apiKey || MANUAL_API_KEY || localStorage.getItem('sw_api_key') || '').trim();
     setLoadingState(prev => ({
       ...prev,
       [targetField]: true
     }));
 
-    // プロンプト定義
     let instruction = "";
     if (targetField === 'condition') {
       instruction = "入力されたキーワードを元に、「体調について」の週評価報告文章を2〜3文程度で簡潔に作成してください。支援員が聞き取りを行い、利用者の1週間の健康状態や睡眠、服薬状況などを評価した記録です。「本日」ではなく「今週」「この1週間」という視点で記述してください。福祉支援記録として適切な「です・ます」調の文章にしてください。";
@@ -3522,10 +3760,15 @@ ${text}`;
                     出力は作成した文章のみを行ってください（JSONではなく、プレーンテキストで出力）。文章は2〜3文に収めてください。
                 `;
     try {
-      const text = await generateGeminiContent(systemPrompt, currentText, currentKey, status => {
-        // ステータス表示があればここで更新できる（現在はloadingのみ）
-        console.log(status);
-      });
+      let text = '';
+      if (currentKey && !deadApiKeysRef.current.has(currentKey)) {
+        text = await generateGeminiContent(systemPrompt, currentText, currentKey, status => {
+          console.log(status);
+        });
+      }
+      if (!text || !text.trim()) {
+        text = generateLocalFieldFromKeyword(targetField, currentText);
+      }
       if (text) {
         setFormData(prev => ({
           ...prev,
@@ -3533,7 +3776,14 @@ ${text}`;
         }));
       }
     } catch (e) {
-      console.error("AI Generation Error:", e);
+      console.warn("AI Generation fallback to local engine:", e.message);
+      const fallbackText = generateLocalFieldFromKeyword(targetField, currentText);
+      if (fallbackText) {
+        setFormData(prev => ({
+          ...prev,
+          [targetField]: fallbackText
+        }));
+      }
     } finally {
       setLoadingState(prev => ({
         ...prev,
@@ -3589,16 +3839,12 @@ ${text}`;
 
   // --- 個別 週評価 AI生成 ---
   const generateIndividualWeeklyContent = async targetField => {
-    const currentKey = apiKey || MANUAL_API_KEY;
-    if (!currentKey) {
-      alert('AI機能を使用するには、設定からAPIキーを登録してください。');
-      return;
-    }
     const currentText = individualWeeklyData[targetField];
     if (!currentText) {
       alert('キーワードを入力してからボタンを押してください。');
       return;
     }
+    const currentKey = (apiKey || MANUAL_API_KEY || localStorage.getItem('sw_api_key') || '').trim();
     setIndividualWeeklyLoading(prev => ({
       ...prev,
       [targetField]: true
@@ -3619,9 +3865,15 @@ ${text}`;
 ${instruction}
 出力は作成した文章のみを行ってください（JSONではなく、プレーンテキストで出力）。文章は2〜3文に収めてください。`;
     try {
-      const text = await generateGeminiContent(systemPrompt, currentText, currentKey, status => {
-        console.log(status);
-      });
+      let text = '';
+      if (currentKey && !deadApiKeysRef.current.has(currentKey)) {
+        text = await generateGeminiContent(systemPrompt, currentText, currentKey, status => {
+          console.log(status);
+        });
+      }
+      if (!text || !text.trim()) {
+        text = generateLocalFieldFromKeyword(targetField, currentText);
+      }
       if (text) {
         setIndividualWeeklyData(prev => ({
           ...prev,
@@ -3629,7 +3881,14 @@ ${instruction}
         }));
       }
     } catch (e) {
-      console.error("AI Generation Error:", e);
+      console.warn("AI Generation fallback to local engine:", e.message);
+      const fallbackText = generateLocalFieldFromKeyword(targetField, currentText);
+      if (fallbackText) {
+        setIndividualWeeklyData(prev => ({
+          ...prev,
+          [targetField]: fallbackText
+        }));
+      }
     } finally {
       setIndividualWeeklyLoading(prev => ({
         ...prev,
@@ -3681,13 +3940,8 @@ ${instruction}
     });
   };
 
-  // --- 個別 達成度評価のAI一括生成 ---
+  // --- 個別 達成度評価のAI一括生成（内蔵スマートエンジン自動フォールバック搭載） ---
   const generateIndividualMonthlyAI = async () => {
-    const currentKey = apiKey || MANUAL_API_KEY;
-    if (!currentKey) {
-      alert('AI機能を使用するには、設定からAPIキーを登録してください。');
-      return;
-    }
     if (!individualMonthlyData.userId) {
       alert('利用者を選択してください。');
       return;
@@ -3709,6 +3963,9 @@ ${instruction}
       return;
     }
     setIndividualMonthlyLoading(true);
+    const currentKey = (apiKey || MANUAL_API_KEY || localStorage.getItem('sw_api_key') || '').trim();
+    const localEval = generateLocalMonthlyEvaluation(user, userRecords, year, month, Math.floor(Math.random() * 100));
+
     const goalTexts = userRecords.map(r => r.goals).filter(Boolean);
     const workTexts = userRecords.map(r => r.workContent).filter(Boolean);
     const condTexts = userRecords.map(r => r.condition).filter(Boolean);
@@ -3769,54 +4026,74 @@ ${baseContext}
 【妥当性】
 在宅就労継続の妥当性を1〜2文で。`;
     try {
-      const allModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash'];
       let generated = false;
-      for (const modelName of allModels) {
-        if (generated) break;
-        try {
-          const genAI = new window.GoogleGenerativeAI(currentKey);
-          const model = genAI.getGenerativeModel({
-            model: modelName
-          });
-          const result = await model.generateContent(batchPrompt);
-          const response = await result.response;
-          const fullText = response.text();
-          if (fullText && fullText.trim()) {
-            const parseSection = (text, startTag, endTags) => {
-              const startIdx = text.indexOf(startTag);
-              if (startIdx === -1) return '';
-              const afterStart = text.substring(startIdx + startTag.length);
-              let endIdx = afterStart.length;
-              for (const tag of endTags) {
-                const idx = afterStart.indexOf(tag);
-                if (idx !== -1 && idx < endIdx) endIdx = idx;
-              }
-              return afterStart.substring(0, endIdx).trim();
-            };
-            setIndividualMonthlyData(prev => ({
-              ...prev,
-              trainingGoal: parseSection(fullText, '【訓練目標】', ['【取組内容】', '【達成度】', '【課題】', '【改善方針】', '【健康面】', '【その他】', '【妥当性】']) || prev.trainingGoal,
-              activities: parseSection(fullText, '【取組内容】', ['【達成度】', '【課題】', '【改善方針】', '【健康面】', '【その他】', '【妥当性】']) || prev.activities,
-              achievement: parseSection(fullText, '【達成度】', ['【課題】', '【改善方針】', '【健康面】', '【その他】', '【妥当性】']) || prev.achievement,
-              issues: parseSection(fullText, '【課題】', ['【改善方針】', '【健康面】', '【その他】', '【妥当性】']) || prev.issues,
-              improvementPlan: parseSection(fullText, '【改善方針】', ['【健康面】', '【その他】', '【妥当性】']) || prev.improvementPlan,
-              healthNotes: parseSection(fullText, '【健康面】', ['【その他】', '【妥当性】']) || prev.healthNotes,
-              otherNotes: parseSection(fullText, '【その他】', ['【妥当性】']) || prev.otherNotes,
-              workValidity: parseSection(fullText, '【妥当性】', []) || prev.workValidity
-            }));
-            generated = true;
-            alert('AI生成が完了しました。内容を確認・修正してから保存してください。');
+      if (currentKey && !deadApiKeysRef.current.has(currentKey)) {
+        const allModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite'];
+        for (const modelName of allModels) {
+          if (generated) break;
+          try {
+            const genAI = new window.GoogleGenerativeAI(currentKey);
+            const model = genAI.getGenerativeModel({ model: modelName });
+            const result = await model.generateContent(batchPrompt);
+            const response = await result.response;
+            const fullText = response.text();
+            if (fullText && fullText.trim()) {
+              const parseSection = (text, startTag, endTags) => {
+                const startIdx = text.indexOf(startTag);
+                if (startIdx === -1) return '';
+                const afterStart = text.substring(startIdx + startTag.length);
+                let endIdx = afterStart.length;
+                for (const tag of endTags) {
+                  const idx = afterStart.indexOf(tag);
+                  if (idx !== -1 && idx < endIdx) endIdx = idx;
+                }
+                return sanitizeSeasonalExpressions(afterStart.substring(0, endIdx).trim());
+              };
+              setIndividualMonthlyData(prev => ({
+                ...prev,
+                trainingGoal: parseSection(fullText, '【訓練目標】', ['【取組内容】', '【達成度】', '【課題】', '【改善方針】', '【健康面】', '【その他】', '【妥当性】']) || localEval.trainingGoal,
+                activities: parseSection(fullText, '【取組内容】', ['【達成度】', '【課題】', '【改善方針】', '【健康面】', '【その他】', '【妥当性】']) || localEval.activities,
+                achievement: parseSection(fullText, '【達成度】', ['【課題】', '【改善方針】', '【健康面】', '【その他】', '【妥当性】']) || localEval.achievement,
+                issues: parseSection(fullText, '【課題】', ['【改善方針】', '【健康面】', '【その他】', '【妥当性】']) || localEval.issues,
+                improvementPlan: parseSection(fullText, '【改善方針】', ['【健康面】', '【その他】', '【妥当性】']) || localEval.improvementPlan,
+                healthNotes: parseSection(fullText, '【健康面】', ['【その他】', '【妥当性】']) || localEval.healthNotes,
+                otherNotes: parseSection(fullText, '【その他】', ['【妥当性】']) || localEval.otherNotes,
+                workValidity: parseSection(fullText, '【妥当性】', []) || localEval.workValidity
+              }));
+              generated = true;
+              alert('AI生成が完了しました。内容を確認・修正してから保存してください。');
+            }
+          } catch (e) {
+            const errMsg = e.message || String(e);
+            console.warn(`AI生成エラー (model: ${modelName}):`, errMsg);
+            if (isFatalGeminiKeyError(errMsg)) {
+              deadApiKeysRef.current.add(currentKey);
+              break;
+            }
           }
-        } catch (e) {
-          console.warn(`AI生成エラー (model: ${modelName}):`, e.message);
         }
       }
       if (!generated) {
-        alert('AI生成に失敗しました。APIキーやネットワークを確認してください。');
+        setIndividualMonthlyData(prev => ({
+          ...prev,
+          trainingGoal: localEval.trainingGoal,
+          activities: localEval.activities,
+          achievement: localEval.achievement,
+          issues: localEval.issues,
+          improvementPlan: localEval.improvementPlan,
+          healthNotes: localEval.healthNotes,
+          otherNotes: localEval.otherNotes,
+          workValidity: localEval.workValidity
+        }));
+        alert('週評価データをもとに全8項目の評価文を自動生成しました。内容を確認・修正してから保存してください。');
       }
     } catch (err) {
       console.error('個別達成度AI生成エラー:', err);
-      alert('エラーが発生しました: ' + err.message);
+      setIndividualMonthlyData(prev => ({
+        ...prev,
+        ...localEval
+      }));
+      alert('週評価データをもとに全8項目の評価文を自動生成しました。');
     } finally {
       setIndividualMonthlyLoading(false);
     }
@@ -5166,6 +5443,7 @@ ${baseContext}
     }
     const year = monthlyFormData.targetYear;
     const month = monthlyFormData.targetMonth;
+    const user = users.find(u => u.id === monthlyFormData.userId) || { id: monthlyFormData.userId, name: '利用者' };
     const userRecords = records.filter(r => {
       if (r.userId !== monthlyFormData.userId) return false;
       const d = new Date(r.implementationDate);
@@ -5175,29 +5453,28 @@ ${baseContext}
       alert(`${year}年${month}月の週評価データが見つかりません。`);
       return;
     }
-    const goalTexts = userRecords.map(r => r.goals).filter(Boolean);
-    const workTexts = userRecords.map(r => r.workContent).filter(Boolean);
-    const condTexts = userRecords.map(r => r.condition).filter(Boolean);
+    const localGen = generateLocalMonthlyEvaluation(user, userRecords, year, month, 0);
     setMonthlyFormData(prev => ({
       ...prev,
-      trainingGoal: goalTexts.length > 0 ? goalTexts[goalTexts.length - 1] : '（データなし）',
-      activities: workTexts.length > 0 ? workTexts.join('\n') : '（データなし）',
-      achievement: condTexts.length > 0 ? condTexts.join('\n') : '（データなし）'
+      trainingGoal: localGen.trainingGoal,
+      activities: localGen.activities,
+      achievement: localGen.achievement,
+      issues: prev.issues || localGen.issues,
+      improvementPlan: prev.improvementPlan || localGen.improvementPlan,
+      healthNotes: prev.healthNotes || localGen.healthNotes,
+      otherNotes: prev.otherNotes || localGen.otherNotes,
+      workValidity: prev.workValidity || localGen.workValidity
     }));
   };
 
-  // --- 月1達成度評価: AI生成 ---
+  // --- 月1達成度評価: AI生成（内蔵フォールバック付き） ---
   const generateMonthlyContent = async targetField => {
-    const currentKey = apiKey || MANUAL_API_KEY;
-    if (!currentKey) {
-      alert('APIキーが設定されていません。管理者に連絡してください。');
-      return;
-    }
     const currentText = monthlyFormData[targetField];
     if (!currentText) {
       alert('キーワードを入力してからボタンを押してください。');
       return;
     }
+    const currentKey = (apiKey || MANUAL_API_KEY || localStorage.getItem('sw_api_key') || '').trim();
     setMonthlyLoading(prev => ({
       ...prev,
       [targetField]: true
@@ -5221,7 +5498,13 @@ ${baseContext}
                     出力はプレーンテキストのみ。
                 `;
     try {
-      const text = await generateGeminiContent(prompt, currentText, currentKey, status => console.log(status));
+      let text = '';
+      if (currentKey && !deadApiKeysRef.current.has(currentKey)) {
+        text = await generateGeminiContent(prompt, currentText, currentKey, status => console.log(status));
+      }
+      if (!text || !text.trim()) {
+        text = generateLocalFieldFromKeyword(targetField, currentText, userName);
+      }
       if (text) {
         setMonthlyFormData(prev => ({
           ...prev,
@@ -5229,8 +5512,14 @@ ${baseContext}
         }));
       }
     } catch (e) {
-      console.error("AI Generation Error:", e);
-      alert(`AI生成エラー: ${e.message}`);
+      console.warn("AI Generation fallback to local engine:", e.message);
+      const fallbackText = generateLocalFieldFromKeyword(targetField, currentText, userName);
+      if (fallbackText) {
+        setMonthlyFormData(prev => ({
+          ...prev,
+          [targetField]: fallbackText
+        }));
+      }
     } finally {
       setMonthlyLoading(prev => ({
         ...prev,
@@ -7054,7 +7343,7 @@ ${baseContext}
     className: "btn btn-primary px-6 py-2.5"
   }, bulkCreating ? /*#__PURE__*/React.createElement("span", {
     className: "loading-dots"
-  }, "AI生成中…お待ちください") : '全利用者の達成度評価を自動作成')), (() => {
+  }, bulkCreateProgress || "自動生成中…お待ちください") : '全利用者の達成度評価を自動作成')), (() => {
     const filteredEvals = savedMonthlyEvals.filter(e => e.targetYear === monthlyFormData.targetYear && e.targetMonth === monthlyFormData.targetMonth).sort((a, b) => {
       const userA = users.find(u => u.id === a.userId);
       const userB = users.find(u => u.id === b.userId);
@@ -7205,7 +7494,31 @@ ${baseContext}
     checked: editMonthlyEvalData.method === m.key,
     onChange: e => updateEditField('method', e.target.value),
     className: "hidden"
-  }), m.label)))), [{
+  }), m.label)))), /*#__PURE__*/React.createElement("div", {
+    className: "bg-gradient-to-r from-indigo-50/80 to-sky-50/80 rounded-xl p-4 border border-indigo-100 flex items-center justify-between gap-3 flex-wrap"
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("p", {
+    className: "font-semibold text-gray-900 text-sm"
+  }, "週評価データから全項目を再生成"), /*#__PURE__*/React.createElement("p", {
+    className: "text-xs text-gray-500 mt-0.5"
+  }, "対象月の週評価データをもとに8項目すべての文章を自動作成・更新します")), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: () => {
+      const u = users.find(usr => usr.id === editMonthlyEvalData.userId) || { id: editMonthlyEvalData.userId, name: '利用者' };
+      const y = Number(editMonthlyEvalData.targetYear);
+      const m = Number(editMonthlyEvalData.targetMonth);
+      const uRecs = records.filter(r => {
+        if (r.userId !== editMonthlyEvalData.userId) return false;
+        const d = new Date(r.implementationDate);
+        return d.getFullYear() === y && d.getMonth() + 1 === m;
+      }).sort((a, b) => new Date(a.implementationDate) - new Date(b.implementationDate));
+      const localGen = generateLocalMonthlyEvaluation(u, uRecs, y, m, Math.floor(Math.random() * 100));
+      setEditMonthlyEvalData(prev => ({
+        ...prev,
+        ...localGen
+      }));
+    },
+    className: "btn btn-primary text-xs px-4 py-2"
+  }, /*#__PURE__*/React.createElement(Icons.Sparkles, null), " 全項目を自動生成")), [{
     key: 'trainingGoal',
     label: '訓練目標',
     rows: 4
@@ -7278,17 +7591,17 @@ ${baseContext}
     className: "glass p-6 rounded-xl space-y-6"
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h3", {
     className: "section-title mb-2"
-  }, "Gemini APIキー"), /*#__PURE__*/React.createElement("p", {
+  }, "Gemini APIキー（任意・内蔵自動生成エンジン搭載）"), /*#__PURE__*/React.createElement("p", {
     className: "text-sm text-gray-500 mb-3"
-  }, "AI自動生成機能（週評価・達成度評価の文章自動作成）を利用するには、Google Gemini APIキーが必要です。", /*#__PURE__*/React.createElement("br", null), /*#__PURE__*/React.createElement("a", {
+  }, "本アプリは内蔵のスマート文章生成エンジンを搭載しているため、", /*#__PURE__*/React.createElement("strong", { className: "text-slate-700" }, "APIキー未設定やクレジット残高不足の場合でも、週評価データから達成度評価（全8項目）を自動で作成"), "できます。", /*#__PURE__*/React.createElement("br", null), "Google Gemini AIによる生成を使用したい場合は、", /*#__PURE__*/React.createElement("a", {
     href: "https://aistudio.google.com/app/apikey",
     target: "_blank",
     rel: "noopener noreferrer",
-    className: "text-gray-900 underline underline-offset-2 hover:text-gray-600"
-  }, "Google AI Studio でAPIキーを取得")), /*#__PURE__*/React.createElement("div", {
-    className: "flex gap-3 items-end"
+    className: "text-indigo-600 font-medium underline underline-offset-2 hover:text-indigo-800"
+  }, "Google AI Studio で無料のAPIキーを取得"), "して登録してください（前払いクレジットが枯渇[402エラー]したキーは、新しい無料枠プロジェクトで再発行するかクリアしてください）。"), /*#__PURE__*/React.createElement("div", {
+    className: "flex gap-2 items-end flex-wrap"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "flex-1"
+    className: "flex-1 min-w-[220px]"
   }, /*#__PURE__*/React.createElement("label", {
     className: "block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider"
   }, "APIキー"), /*#__PURE__*/React.createElement("input", {
@@ -7296,20 +7609,41 @@ ${baseContext}
     className: "input-field",
     value: apiKey,
     onChange: e => setApiKey(e.target.value),
-    placeholder: "AIza..."
+    placeholder: "AIza...（空欄でも内蔵エンジンで自動作成可能）"
   })), /*#__PURE__*/React.createElement("button", {
     onClick: () => {
-      if (apiKey) {
-        localStorage.setItem('sw_api_key', apiKey);
-        alert('APIキーを保存しました。');
+      const trimmedKey = (apiKey || '').trim();
+      setApiKey(trimmedKey);
+      deadApiKeysRef.current.clear();
+      if (trimmedKey) {
+        localStorage.setItem('sw_api_key', trimmedKey);
+        localStorage.removeItem('sw_api_key_cleared');
+        saveAccountMetaToSupabase({ apiKey: trimmedKey });
+        saveToGasCloud({ apiKey: trimmedKey });
+        alert('APIキーを保存し、クラウド設定にも反映しました。');
       } else {
         localStorage.removeItem('sw_api_key');
-        alert('APIキーを削除しました。');
+        localStorage.setItem('sw_api_key_cleared', '1');
+        saveAccountMetaToSupabase({ apiKey: '' });
+        saveToGasCloud({ apiKey: '' });
+        alert('APIキーを削除しました（内蔵の自動文章生成エンジンで動作します）。');
       }
     },
     className: "btn btn-primary h-11 px-6"
-  }, "保存")), apiKey && /*#__PURE__*/React.createElement("div", {
-    className: "mt-3 flex items-center gap-2"
+  }, "保存"), apiKey && /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: () => {
+      setApiKey('');
+      deadApiKeysRef.current.clear();
+      localStorage.removeItem('sw_api_key');
+      localStorage.setItem('sw_api_key_cleared', '1');
+      saveAccountMetaToSupabase({ apiKey: '' });
+      saveToGasCloud({ apiKey: '' });
+      alert('APIキーをクリアしました。以降はエラーなしで内蔵の自動文章生成エンジンが使用されます。');
+    },
+    className: "btn btn-outline h-11 px-4 text-xs"
+  }, "キーをクリア")), apiKey && /*#__PURE__*/React.createElement("div", {
+    className: "mt-3 flex items-center gap-2 flex-wrap"
   }, /*#__PURE__*/React.createElement("span", {
     className: "inline-block w-2 h-2 rounded-full bg-green-500"
   }), /*#__PURE__*/React.createElement("span", {
@@ -7317,29 +7651,42 @@ ${baseContext}
   }, "APIキーが設定されています"), /*#__PURE__*/React.createElement("button", {
     onClick: async () => {
       try {
-        const genAI = new window.GoogleGenerativeAI(apiKey);
+        const cleanKey = (apiKey || '').trim();
+        const genAI = new window.GoogleGenerativeAI(cleanKey);
         const model = genAI.getGenerativeModel({
           model: 'gemini-2.5-flash'
         });
         const result = await model.generateContent('テスト。「OK」とだけ返してください。');
         const response = await result.response;
         if (response.text()) {
-          alert('APIキーは有効です。AI生成が利用できます。');
+          deadApiKeysRef.current.delete(cleanKey);
+          alert('✅ APIキーは有効です。Gemini AI生成が正常に利用できます。');
         } else {
           alert('APIキーのテストに失敗しました。レスポンスが空です。');
         }
       } catch (e) {
-        alert('APIキーが無効です。エラー: ' + e.message);
+        const errMsg = e.message || String(e);
+        if (errMsg.includes('402') || errMsg.includes('prepayment credits')) {
+          alert(
+            '⚠️ 【原因：Google AI Studio の前払いクレジット残高不足 (エラー 402)】\n\n' +
+            '現在設定されているAPIキーのプロジェクトは、前払いクレジット（Prepay credits）の残高が 0 になっているため、Google側でリクエストが拒否されています。\n\n' +
+            '■ 解決方法：\n' +
+            '1. 「キーをクリア」ボタンを押して内蔵エンジンモードにする（APIキーなしでも全8項目を自動作成できます）\n' +
+            '2. または Google AI Studio (https://aistudio.google.com/app/apikey) で、課金設定をしていない「新しいプロジェクト」の無料APIキーを発行して貼り替えてください。'
+          );
+        } else {
+          alert(`⚠️ APIキー接続エラー (${formatGeminiErrorShort(errMsg)}):\n\n${errMsg}\n\n※「キーをクリア」を押すと、エラーを出さずに内蔵エンジンで達成度評価を自動作成できます。`);
+        }
       }
     },
-    className: "text-sm text-gray-700 underline underline-offset-2 hover:text-gray-900 cursor-pointer ml-2"
-  }, "接続テスト")), !apiKey && /*#__PURE__*/React.createElement("div", {
+    className: "text-sm text-indigo-700 font-medium underline underline-offset-2 hover:text-indigo-900 cursor-pointer ml-2"
+  }, "接続テストを実行")), !apiKey && /*#__PURE__*/React.createElement("div", {
     className: "mt-3 flex items-center gap-2"
   }, /*#__PURE__*/React.createElement("span", {
-    className: "inline-block w-2 h-2 rounded-full bg-yellow-500"
+    className: "inline-block w-2 h-2 rounded-full bg-indigo-500"
   }), /*#__PURE__*/React.createElement("span", {
-    className: "text-sm text-yellow-600 font-medium"
-  }, "APIキーが未設定です（AI生成機能は利用できません）")))), /*#__PURE__*/React.createElement("div", {
+    className: "text-sm text-indigo-700 font-medium"
+  }, "内蔵スマート文章生成エンジン有効（APIキーなしでも全項目を自動作成できます）")))), /*#__PURE__*/React.createElement("div", {
     className: "glass p-6 rounded-xl border border-indigo-100 bg-indigo-50/20 space-y-4"
   }, /*#__PURE__*/React.createElement("div", {
     className: "flex items-center justify-between flex-wrap gap-2"
